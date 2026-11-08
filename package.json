@@ -1,0 +1,14 @@
+{
+  "name": "samotto-bot",
+  "version": "1.0.0",
+  "description": "Samotto automated bot system",
+  "type": "module",
+  "main": "scripts/bot-runner.js",
+  "scripts": {
+    "start": "node scripts/bot-runner.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "node-fetch": "^3.3.2"
+  }
+}
