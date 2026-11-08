@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>さもっとー - ログイン</title>
+    <link rel="icon" href="https://i.ibb.co/TDtWKs5w/samos2.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #000000;
+            --card-bg: #16181c;
+            --border: #2f3336;
+            --accent: #1d9bf0;
+            --text: #e7e9ea;
+            --text-muted: #71767b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; background-color: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; display: flex; align-items: center; justify-content: center; }
+
+        .login-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px 30px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+
+        .login-logo { width: 64px; height: 64px; border-radius: 50%; margin-bottom: 20px; object-fit: cover; }
+        h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 8px; }
+        p.subtitle { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 9999px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            border: 1px solid var(--border);
+            margin-bottom: 12px;
+            transition: background 0.2s;
+        }
+
+        .btn-google { background: #ffffff; color: #000000; border-color: #ddd; }
+        .btn-google:hover { background: #f1f1f1; }
+
+        .btn-discord { background: #5865F2; color: #ffffff; border-color: #5865F2; }
+        .btn-discord:hover { background: #4752C4; }
+
+        .terms-area {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .terms-link {
+            color: var(--accent);
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .terms-link:hover { opacity: 0.8; }
+
+        .error-message { color: #ef4444; font-size: 0.8rem; margin-top: 12px; display: none; line-height: 1.4; }
+
+        /* モーダル用のスタイル */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 24px;
+            text-align: left;
+            color: var(--text);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+        .modal-header h3 { font-size: 1.1rem; }
+        .modal-close { cursor: pointer; font-size: 1.2rem; color: var(--text-muted); }
+        .modal-body h4 { color: var(--accent); margin-top: 12px; margin-bottom: 4px; font-size: 0.95rem; }
+        .modal-body p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px; }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { 
+            getAuth, 
+            GoogleAuthProvider, 
+            signInWithPopup, 
+            signInAnonymously,
+            onAuthStateChanged, 
+            signOut 
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
+            authDomain: "my-ball-wiki.firebaseapp.com",
+            projectId: "my-ball-wiki",
+            storageBucket: "my-ball-wiki.firebasestorage.app",
+            messagingSenderId: "1004863748430",
+            appId: "1:1004863748430:web:584e16403e2eb87c90861f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const googleProvider = new GoogleAuthProvider();
+
+        const DISCORD_CLIENT_ID = "1568955105481334854";
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwt7nuQC2rN1_N9zVd8-4xX7PM7NF3H98ZlDjkrWluWcBtqDrYTkGu71IK_KTW--jB2/exec";
+        const REDIRECT_URI = window.location.origin + window.location.pathname;
+
+        const ADMIN_UIDS = ['samon53577'];
+        const ADMIN_EMAILS = ['kuwakuwa53577.2@gmail.com', 'mikancat09@gmail.com'];
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+
+            if (code) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+                await handleDiscordCallback(code);
+            }
+        });
+
+        // モーダル開閉用関数
+        window.openTermsModal = () => {
+            document.getElementById('terms-modal').style.display = 'flex';
+        };
+        window.closeTermsModal = () => {
+            document.getElementById('terms-modal').style.display = 'none';
+        };
+
+        window.loginWithGoogle = async () => {
+            if (!checkTerms()) return;
+            try {
+                const result = await signInWithPopup(auth, googleProvider);
+                await processLoginSecurityAndLogging(result.user, result.user.displayName, result.user.photoURL);
+            } catch (e) {
+                showError("Googleログインエラー: " + e.message);
+            }
+        };
+
+        window.loginWithDiscord = () => {
+            if (!checkTerms()) return;
+            const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify%20email`;
+            window.location.href = discordAuthUrl;
+        };
+
+        async function handleDiscordCallback(code) {
+            try {
+                showError("Discordログインを検証中...");
+
+                const res = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ code: code, redirectUri: REDIRECT_URI })
+                });
+
+                const data = await res.json();
+                if (data.status !== "success") throw new Error(data.message);
+
+                let user = auth.currentUser;
+                if (!user) {
+                    const cred = await signInAnonymously(auth);
+                    user = cred.user;
+                }
+
+                const discordUser = {
+                    uid: "discord_" + data.discordId,
+                    email: data.email,
+                    displayName: data.username,
+                    photoURL: data.avatar
+                };
+
+                await processLoginSecurityAndLogging(discordUser, data.username, data.avatar);
+
+            } catch (e) {
+                showError("Discordログインエラー: " + e.message);
+            }
+        }
+
+        async function processLoginSecurityAndLogging(user, displayName, photoURL) {
+            const userEmail = user.email;
+            const userUid = user.uid;
+            const isAdmin = ADMIN_UIDS.includes(userUid) || ADMIN_EMAILS.includes(userEmail);
+
+            if (!userEmail) {
+                await signOut(auth);
+                showError("エラー: メールアドレスが取得できませんでした。");
+                return;
+            }
+
+            let ipAddress = "不明";
+            try {
+                const ipRes = await fetch('https://api.ipify.org?format=json');
+                const ipData = await ipRes.json();
+                ipAddress = ipData.ip;
+            } catch (e) {
+                console.warn("IP取得失敗");
+            }
+
+            const blockedSnap = await getDocs(collection(db, "blocked_rules"));
+            let isBlocked = false;
+            blockedSnap.forEach(docSnap => {
+                const ruleData = docSnap.data();
+                if (ruleData.value === ipAddress || ruleData.value === userEmail) {
+                    isBlocked = true;
+                }
+            });
+
+            if (isBlocked && !isAdmin) {
+                await signOut(auth);
+                showError("アクセス拒否: このIPアドレスまたはメールアドレスはブロックされています。");
+                return;
+            }
+
+            const userRef = doc(db, "users", userUid);
+            const userSnap = await getDoc(userRef);
+
+            if (userSnap.exists() && userSnap.data().isBanned && !isAdmin) {
+                await signOut(auth);
+                showError("アカウント永久停止（BAN）されています。");
+                return;
+            }
+
+            const userAgent = navigator.userAgent;
+            const referrer = document.referrer || "直接アクセス";
+            const screenWidth = window.screen.width;
+            const screenHeight = window.screen.height;
+            const sessionId = 'sess_' + Math.random().toString(36) + Date.now().toString(36);
+
+            let createdAtDate = new Date().toISOString();
+            if (userSnap.exists() && userSnap.data().createdAt) {
+                createdAtDate = userSnap.data().createdAt;
+            }
+
+            if (!userSnap.exists()) {
+                await setDoc(userRef, {
+                    uid: userUid,
+                    email: userEmail,
+                    customId: userUid.slice(0, 6),
+                    displayName: displayName || "ユーザー",
+                    photoURL: photoURL || "https://i.imgur.com/CcBLZ0O.png",
+                    bannerURL: "",
+                    bio: "さもっとーへようこそ！",
+                    status: "online",
+                    isBanned: false,
+                    banReason: "",
+                    following: [],
+                    followers: [],
+                    bookmarks: [],
+                    createdAt: createdAtDate
+                });
+            } else {
+                await updateDoc(userRef, { email: userEmail, displayName: displayName, photoURL: photoURL });
+            }
+
+            await addDoc(collection(db, "login_logs"), {
+                uid: userUid,
+                email: userEmail,
+                ip: ipAddress,
+                ua: userAgent,
+                referrer: referrer,
+                screen: `${screenWidth}x${screenHeight}`,
+                sessionId: sessionId,
+                accountCreatedAt: createdAtDate,
+                createdAt: serverTimestamp()
+            });
+
+            localStorage.setItem('is_logged_in', 'true');
+            localStorage.setItem('session_id', sessionId);
+            window.location.href = 'index.html';
+        }
+
+        function checkTerms() {
+            const agreed = document.getElementById('terms-check').checked;
+            if (!agreed) {
+                showError("ログインするには利用規約への同意が必要です。");
+                return false;
+            }
+            return true;
+        }
+
+        function showError(msg) {
+            const errBox = document.getElementById('error-box');
+            errBox.innerText = msg;
+            errBox.style.display = 'block';
+        }
+    </script>
+</head>
+<body>
+
+    <div class="login-card">
+        <img src="https://i.ibb.co/TDtWKs5w/samos2.png" alt="Logo" class="login-logo">
+        <h1>さもっとーにログイン</h1>
+        <p class="subtitle">GoogleまたはDiscordで安全にログインできます。</p>
+
+        <div class="terms-area">
+            <input type="checkbox" id="terms-check" checked>
+            <label for="terms-check">
+                <span class="terms-link" onclick="openTermsModal()">利用規約とプライバシーポリシー</span>に同意する
+            </label>
+        </div>
+
+        <button class="login-btn btn-google" onclick="loginWithGoogle()">
+            <i class="fa-brands fa-google"></i> Googleアカウントでログイン
+        </button>
+
+        <button class="login-btn btn-discord" onclick="loginWithDiscord()">
+            <i class="fa-brands fa-discord"></i> Discordアカウントでログイン
+        </button>
+
+        <div id="error-box" class="error-message"></div>
+    </div>
+
+    <!-- 利用規約・プライバシーポリシーモーダル -->
+    <div class="modal-overlay" id="terms-modal" onclick="if(event.target === this) closeTermsModal()">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>利用規約 & プライバシーポリシー</h3>
+                <i class="fa-solid fa-xmark modal-close" onclick="closeTermsModal()"></i>
+            </div>
+            <div class="modal-body">
+                <h4>1. 利用規約</h4>
+                <p>
+                    「さもっとー」は、安全で快適な掲示板型SNSを目指しています。不適切なコンテンツの投稿、スパム、荒らし行為、外部への迷惑行為は固く禁止します。違反が確認された場合、事前通知なくアカウントおよびアクセスIPを永久ブロックします。ほかにも年齢が12歳以下の方はサービスの利用を禁止します。
+                </p>
+
+                <h4>2. プライバシーポリシー</h4>
+                <p>
+                    当サービスではセキュリティ向上とBot対策を目的として、アクセスログ等の環境情報を収集・記録します。取得した情報はアクセス制限および管理目的のみに使用し、第三者へ開示することはありません。また、IPアドレスはIPブロックされるために使い、ユーザーの個人情報を特定するために使われません。（そもそも特定できません。）
+                </p>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
