@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>さもっとー - 通報・要望管理</title>
+    <link rel="icon" href="https://i.ibb.co/TDtWKs5w/samos2.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: sans-serif; background-color: #1e1e24; color: #fff; padding: 20px; }
+        h1 { font-size: 1.4rem; display: flex; align-items: center; gap: 10px; }
+        .back-link { color: #1d9bf0; text-decoration: none; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+        .section-box { background: #27272a; padding: 20px; border-radius: 12px; margin-top: 24px; }
+        .table-container { width: 100%; overflow-x: auto; margin-top: 12px; }
+        table { width: 100%; border-collapse: collapse; background: #27272a; min-width: 700px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #3f3f46; font-size: 13px; }
+        th { background: #3f3f46; color: #a1a1aa; }
+        .btn-action { background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px; }
+        .btn-action:hover { opacity: 0.8; }
+        .btn-done { background: #22c55e; }
+    </style>
+</head>
+<body>
+    <a href="uouo7_2.html" class="back-link"><i class="fa-solid fa-arrow-left"></i> 管理者ダッシュボードに戻る</a>
+    <h1><i class="fa-solid fa-shield-halved" style="color:#1d9bf0;"></i> 通報および要望管理センター</h1>
+
+    <div class="section-box">
+        <h2 style="font-size:1.1rem; color:#ef4444; margin-bottom:8px;"><i class="fa-solid fa-flag"></i> ユーザーからの通報一覧</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>種別</th>
+                        <th>対象ID / 投稿</th>
+                        <th>理由 & 詳細</th>
+                        <th>通報者</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="reports-table-body">
+                    <tr><td colspan="6" style="text-align:center;">認証確認中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="section-box">
+        <h2 style="font-size:1.1rem; color:#1d9bf0; margin-bottom:8px;"><i class="fa-solid fa-lightbulb"></i> ユーザーからの要望・フィードバック一覧</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>日時</th>
+                        <th>カテゴリー</th>
+                        <th>内容</th>
+                        <th>送信者</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="requests-table-body">
+                    <tr><td colspan="5" style="text-align:center;">認証確認中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, collection, getDocs, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
+        authDomain: "my-ball-wiki.firebaseapp.com",
+        projectId: "my-ball-wiki",
+        storageBucket: "my-ball-wiki.firebasestorage.app",
+        messagingSenderId: "1004863748430",
+        appId: "1:1004863748430:web:584e16403e2eb87c90861f",
+        measurementId: "G-TXLXVEVFDW"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+            alert("ログインしていません。ログインページに移動します。");
+            window.location.href = 'login.html';
+            return;
+        }
+        loadData();
+    });
+
+    async function loadData() {
+        const reportsTbody = document.getElementById('reports-table-body');
+        reportsTbody.innerHTML = '';
+        try {
+            const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
+            const snap = await getDocs(q);
+            if (snap.empty) {
+                reportsTbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#a1a1aa;">通報はありません。</td></tr>`;
+            } else {
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const tr = document.createElement('tr');
+                    const dateStr = data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleString('ja-JP') : 'たった今';
+                    
+                    tr.innerHTML = `
+                        <td>${dateStr}</td>
+                        <td><span style="background:${data.type === 'post' ? '#3b82f6' : '#8b5cf6'}; padding:2px 6px; border-radius:4px; font-size:11px;">${data.type.toUpperCase()}</span></td>
+                        <td>${data.targetId}</td>
+                        <td><strong>[${data.reason}]</strong><br>${data.detail || '詳細なし'}</td>
+                        <td>${data.reporterName} <br><span style="font-size:10px; color:#a1a1aa;">${data.reporterEmail}</span></td>
+                        <td>
+                            ${data.type === 'post' ? `<button class="btn-action" onclick="deleteTargetPost('${data.targetId}', '${docSnap.id}')">対象投稿を削除</button>` : ''}
+                            <button class="btn-action btn-done" onclick="removeReportDoc('reports', '${docSnap.id}')">対応完了（削除）</button>
+                        </td>
+                    `;
+                    reportsTbody.appendChild(tr);
+                });
+            }
+        } catch (e) {
+            console.error(e);
+            reportsTbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:red;">読み込みエラー: ${e.message}</td></tr>`;
+        }
+
+        const requestsTbody = document.getElementById('requests-table-body');
+        requestsTbody.innerHTML = '';
+        try {
+            const qReq = query(collection(db, "user_requests"), orderBy("createdAt", "desc"));
+            const snapReq = await getDocs(qReq);
+            if (snapReq.empty) {
+                requestsTbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#a1a1aa;">要望はありません。</td></tr>`;
+            } else {
+                snapReq.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const tr = document.createElement('tr');
+                    const dateStr = data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleString('ja-JP') : 'たった今';
+
+                    tr.innerHTML = `
+                        <td>${dateStr}</td>
+                        <td><span style="color:#1d9bf0; font-weight:bold;">${data.category}</span></td>
+                        <td>${data.detail}</td>
+                        <td>${data.senderName} <br><span style="font-size:10px; color:#a1a1aa;">${data.senderEmail}</span></td>
+                        <td>
+                            <button class="btn-action btn-done" onclick="removeReportDoc('user_requests', '${docSnap.id}')">確認済（削除）</button>
+                        </td>
+                    `;
+                    requestsTbody.appendChild(tr);
+                });
+            }
+        } catch (e) {
+            console.error(e);
+            requestsTbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">読み込みエラー: ${e.message}</td></tr>`;
+        }
+    }
+
+    window.deleteTargetPost = async (postId, reportDocId) => {
+        if (confirm("この通報された投稿自体を削除しますか？")) {
+            try {
+                await deleteDoc(doc(db, "posts", postId));
+                await deleteDoc(doc(db, "reports", reportDocId));
+                alert("投稿を削除し、通報を処理しました。");
+                loadData();
+            } catch (e) {
+                alert("エラー: " + e.message);
+            }
+        }
+    };
+
+    window.removeReportDoc = async (collName, docId) => {
+        if (confirm("この項目をリストから削除（完了）しますか？")) {
+            try {
+                await deleteDoc(doc(db, collName, docId));
+                loadData();
+            } catch (e) {
+                alert("エラー: " + e.message);
+            }
+        }
+    };
+</script>
+</body>
+</html>

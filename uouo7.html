@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>さもっとー - 管理者画面</title>
+    <link rel="icon" href="https://i.ibb.co/TDtWKs5w/samos2.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: sans-serif; background-color: #1e1e24; color: #fff; padding: 20px; }
+        h1 { font-size: 1.4rem; }
+        .control-panel { background: #27272a; padding: 16px; border-radius: 8px; margin-top: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        .table-container { width: 100%; overflow-x: auto; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; background: #27272a; min-width: 800px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #3f3f46; font-size: 13px; }
+        th { background: #3f3f46; color: #a1a1aa; }
+        .btn-block { background: #ef4444; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 12px; }
+        .btn-block:hover { opacity: 0.8; }
+        .btn-link { background: #1d9bf0; color: white; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; inset: 0; background-color: #4b5563; transition: .2s; border-radius: 26px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+        input:checked + .slider { background-color: #22c55e; }
+        input:checked + .slider:before { transform: translateX(24px); }
+    </style>
+</head>
+<body>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <h1>さもっとー サーバー管理ダッシュボード</h1>
+        <a href="reports.html" class="btn-link"><i class="fa-solid fa-flag"></i> 通報・要望管理ページへ移動</a>
+    </div>
+
+    <!-- メンテナンスモード切り替えコントロール -->
+    <div class="control-panel">
+        <div>
+            <strong style="font-size:1.05rem;">メンテナンスモード切替</strong>
+            <p style="font-size:12px; color:#a1a1aa; margin-top:2px;">ONにすると、管理者（特定メール/UID）以外は「さもっとー」にアクセスできなくなります。</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px;">
+            <label class="switch">
+                <input type="checkbox" id="maintenance-toggle" onchange="toggleMaintenance(this)">
+                <span class="slider"></span>
+            </label>
+            <span id="maintenance-status-label" style="font-weight:bold; font-size:13px;">確認中...</span>
+        </div>
+    </div>
+
+    <h2 style="font-size:1.1rem; margin-top:24px;">ユーザーログイン履歴（拡張監視）</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>日時</th>
+                    <th>メール / UID</th>
+                    <th>IPアドレス</th>
+                    <th>参照元 (Referrer)</th>
+                    <th>画面解像度</th>
+                    <th>ブラウザ情報 (UA)</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="log-table-body">
+                <tr><td colspan="7" style="text-align:center;">読み込み中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, addDoc, query, orderBy, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
+        authDomain: "my-ball-wiki.firebaseapp.com",
+        projectId: "my-ball-wiki",
+        storageBucket: "my-ball-wiki.firebasestorage.app",
+        messagingSenderId: "1004863748430",
+        appId: "1:1004863748430:web:584e16403e2eb87c90861f"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function initAdminPanel() {
+        // メンテナンス状態の読み込み
+        try {
+            const sysSnap = await getDoc(doc(db, "settings", "system"));
+            const toggle = document.getElementById('maintenance-toggle');
+            const label = document.getElementById('maintenance-status-label');
+
+            if (sysSnap.exists() && sysSnap.data().maintenanceMode) {
+                toggle.checked = true;
+                label.innerText = "有効 (メンテナンス中)";
+                label.style.color = "#22c55e";
+            } else {
+                toggle.checked = false;
+                label.innerText = "無効 (通常稼働)";
+                label.style.color = "#a1a1aa";
+            }
+        } catch (e) {
+            console.error("設定読み込みエラー:", e);
+        }
+
+        loadLogs();
+    }
+
+    window.toggleMaintenance = async (checkbox) => {
+        const isChecked = checkbox.checked;
+        const label = document.getElementById('maintenance-status-label');
+
+        try {
+            await setDoc(doc(db, "settings", "system"), {
+                maintenanceMode: isChecked,
+                maintenanceNotice: "現在システムメンテナンスを行っております。完了までしばらくお待ちください。"
+            }, { merge: true });
+
+            label.innerText = isChecked ? "有効 (メンテナンス中)" : "無効 (通常稼働)";
+            label.style.color = isChecked ? "#22c55e" : "#a1a1aa";
+            alert(isChecked ? "メンテナンスモードを有効にしました。" : "メンテナンスモードを解除しました。");
+        } catch (e) {
+            alert("設定の保存に失敗しました: " + e.message);
+            checkbox.checked = !isChecked;
+        }
+    };
+
+    async function loadLogs() {
+        const tbody = document.getElementById('log-table-body');
+        tbody.innerHTML = '';
+
+        try {
+            const blockedSnap = await getDocs(collection(db, "blocked_rules"));
+            const blockedValues = [];
+            blockedSnap.forEach(doc => blockedValues.push(doc.data().value));
+
+            const q = query(collection(db, "login_logs"), orderBy("createdAt", "desc"));
+            const querySnapshot = await getDocs(q);
+
+            if(querySnapshot.empty) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">データがありません。</td></tr>`;
+                return;
+            }
+
+            querySnapshot.forEach((docSnap) => {
+                const log = docSnap.data();
+                const tr = document.createElement('tr');
+                
+                const dateStr = log.createdAt ? new Date(log.createdAt.seconds * 1000).toLocaleString('ja-JP') : 'たった今';
+                const isIpBlocked = blockedValues.includes(log.ip);
+                const isEmailBlocked = blockedValues.includes(log.email);
+
+                const ipAction = isIpBlocked ? '<span style="color:#ef4444;">IPブロック済</span>' : `<button class="btn-block" onclick="blockTarget('${log.ip}')">IPブロック</button>`;
+                const emailAction = isEmailBlocked ? '<span style="color:#ef4444;">ﾒｰﾙブロック済</span>' : `<button class="btn-block" onclick="blockTarget('${log.email}')" style="background:#f59e0b;">メールブロック</button>`;
+                
+                tr.innerHTML = `
+                    <td>${dateStr}</td>
+                    <td>${log.email || 'N/A'}<br><span style="font-size:10px; color:#a1a1aa;">UID: ${log.uid || 'N/A'}</span></td>
+                    <td>${log.ip}</td>
+                    <td style="max-width:120px; overflow:hidden; text-overflow:ellipsis;" title="${log.referrer || ''}">${log.referrer || '-'}</td>
+                    <td>${log.screen || '-'}</td>
+                    <td style="font-size:11px; max-width:200px; overflow:hidden; text-overflow:ellipsis;" title="${log.ua || ''}">${log.ua}</td>
+                    <td>${ipAction} ${emailAction}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">データの読み込みに失敗しました。</td></tr>`;
+        }
+    }
+
+    window.blockTarget = async (value) => {
+        if (confirm(`${value} をブロックリストに追加しますか？`)) {
+            try {
+                await addDoc(collection(db, "blocked_rules"), { value: value });
+                alert("ブロックしました。");
+                loadLogs();
+            } catch (e) {
+                alert("ブロックの保存に失敗しました: " + e.message);
+            }
+        }
+    };
+
+    window.onload = initAdminPanel;
+</script>
+</body>
+</html>
