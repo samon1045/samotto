@@ -1,0 +1,31 @@
+name: Samotto Auto Bot
+
+on:
+  schedule:
+    # 毎日 朝8:00 (日本時間) に実行 ※UTC時刻で指定するため 23:00 に設定
+    - cron: '0 23 * * *'
+    # 毎日 夜23:00 (日本時間) に実行 ※UTC時刻で 14:00 に設定
+    - cron: '0 14 * * *'
+    # 地震速報やシステムチェック用など、10分おきに細かく走らせたい場合
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # GitHubの画面から手動でもテスト実行できるようにする
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run Bot Script
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/bot-runner.js
