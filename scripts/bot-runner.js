@@ -1,7 +1,6 @@
 import admin from 'firebase-admin';
 import fetch from 'node-fetch';
 
-// GitHub Secretsの環境変数からFirebase認証情報を安全に読み込む
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   admin.initializeApp({
@@ -11,7 +10,6 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// 公式Botのアカウント情報
 const BOT_USER = {
   uid: "samotto_official_bot",
   authorName: "さもっとー公式Bot 🤖",
@@ -20,7 +18,6 @@ const BOT_USER = {
   customId: "samotto_bot"
 };
 
-// 投稿をFirestoreに書き込む共通関数
 async function createBotPost(title, text, tags = ["Bot"]) {
   try {
     await db.collection("posts").add({
@@ -44,7 +41,6 @@ async function createBotPost(title, text, tags = ["Bot"]) {
   }
 }
 
-// 記念日・カウントダウン計算（3日以内になったら表示）
 function getCountdownText() {
   const today = new Date();
   const events = [
@@ -73,16 +69,13 @@ function getCountdownText() {
   return messages.length > 0 ? "\n\n【📅 カウントダウン】\n" + messages.join("\n") : "";
 }
 
-// メインの処理分岐（GitHub Actionsの実行タイミングや引数で制御）
 async function main() {
-  const mode = process.argv[2] || "morning"; // デフォルトは朝の挨拶
   const now = new Date();
   const utcHour = now.getUTCHours();
 
   console.log(`Botスクリプト実行開始 (UTC時間: ${utcHour}時)`);
 
-  // --- 1. 朝の挨拶 (日本時間 朝8:00 = UTC 23:00) ---
-  if (utcHour === 23 || mode === "morning") {
+  if (utcHour === 23) {
     let weatherText = "☀️ 本日も良い天気になりそうです！";
     try {
       const res = await fetch("https://weather.tsukumijima.net/api/forecast/city/130010");
@@ -100,8 +93,7 @@ async function main() {
     await createBotPost("☀️ 朝のデイリーアナウンス", text, ["Bot", "朝の挨拶", "ニュース"]);
   }
 
-  // --- 2. ナイト・リポート (日本時間 夜23:00 = UTC 14:00) ---
-  if (utcHour === 14 || mode === "night") {
+  if (utcHour === 14) {
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     try {
       const snap = await db.collection("posts").where("createdAt", ">=", startOfDay).get();
@@ -133,44 +125,40 @@ async function main() {
     }
   }
 
-  // --- 3. 地震速報チェック (数分おきに実行される想定) ---
-  if (mode === "earthquake" || process.env.RUN_MODE === "earthquake") {
-    try {
-      const res = await fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1");
-      const data = await res.json();
-      if (data && data.length > 0) {
-        const eq = data[0];
-        const maxScale = eq.earthquake?.maxScale;
-        // 震度3以上 (30以上) の場合のみ通知
-        if (maxScale >= 30) {
-          const scaleMap = { 30: "3", 40: "4", 45: "5弱", 50: "5強", 55: "6弱", 60: "6強", 70: "7" };
-          const scaleText = scaleMap[maxScale] || "不明";
-          const location = eq.earthquake?.hypocenter?.name || "日本近海";
-          
-          const eqMessage = `🚨 【地震速報】\n震度${scaleText}の地震が発生しました。\n\n📍 震源地: ${location}\n🌊 津波の心配: ${eq.earthquake?.domesticTsunami || '情報確認中'}\n\n身の安全を第一に、落ち着いて行動してください。`;
-          
-          // 重複投稿を防ぐための簡易チェック（直近5分以内に同じIDの地震が投稿されていなければ投稿）
-          const recentCheck = await db.collection("posts")
-            .where("tags", "array-contains", "地震速報")
-            .orderBy("createdAt", "desc")
-            .limit(1)
-            .get();
+  // --- 3. 地震速報チェック (10分おきに実行) ---
+  try {
+    const res = await fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1");
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const eq = data[0];
+      const maxScale = eq.earthquake?.maxScale;
+      if (maxScale >= 30) {
+        const scaleMap = { 30: "3", 40: "4", 45: "5弱", 50: "5強", 55: "6弱", 60: "6強", 70: "7" };
+        const scaleText = scaleMap[maxScale] || "不明";
+        const location = eq.earthquake?.hypocenter?.name || "日本近海";
+        
+        const eqMessage = `🚨 【地震速報】\n震度${scaleText}の地震が発生しました。\n\n📍 震源地: ${location}\n🌊 津波の心配: ${eq.earthquake?.domesticTsunami || '情報確認中'}\n\n身の安全を第一に、落ち着いて行動してください。`;
+        
+        const recentCheck = await db.collection("posts")
+          .where("tags", "array-contains", "地震速報")
+          .orderBy("createdAt", "desc")
+          .limit(1)
+          .get();
 
-          let shouldPost = true;
-          if (!recentCheck.empty) {
-            const lastPost = recentCheck.docs[0].data();
-            if (lastPost.text.includes(location)) {
-              shouldPost = false; // すでに同じ場所の速報があればスキップ
-            }
-          }
-
-          if (shouldPost) {
-            await createBotPost("🚨 地震速報", eqMessage, ["地震", "地震速報"]);
+        let shouldPost = true;
+        if (!recentCheck.empty) {
+          const lastPost = recentCheck.docs[0].data();
+          if (lastPost.text.includes(location)) {
+            shouldPost = false; 
           }
         }
+
+        if (shouldPost) {
+          await createBotPost("🚨 地震速報", eqMessage, ["地震", "地震速報"]);
+        }
       }
-    } catch (e) {}
-  }
+    }
+  } catch (e) {}
 }
 
 main().then(() => process.exit(0));
