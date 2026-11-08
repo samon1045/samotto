@@ -1,0 +1,1813 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>さもっとー</title>    
+    <meta name="description" content="さもっとー - ハイブリッドSNS">
+    <link rel="icon" href="https://i.ibb.co/TDtWKs5w/samos2.png">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
+            authDomain: "my-ball-wiki.firebaseapp.com",
+            projectId: "my-ball-wiki",
+            storageBucket: "my-ball-wiki.firebasestorage.app",
+            messagingSenderId: "1004863748430",
+            appId: "1:1004863748430:web:584e16403e2eb87c90861f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const ADMIN_UIDS = ['samon53577'];
+        const ADMIN_EMAILS = ['kuwakuwa53577.2@gmail.com'];
+
+        if (localStorage.getItem('is_logged_in') !== 'true') {
+            window.location.href = 'login.html';
+        }
+
+        auth.onAuthStateChanged(async (user) => {
+            if (!user) {
+                window.location.href = 'login.html';
+                return;
+            }
+            try {
+                const userEmail = user.email || "";
+                const userUid = user.uid;
+                const isAdmin = ADMIN_UIDS.includes(userUid) || ADMIN_EMAILS.includes(userEmail);
+
+                const sysSnap = await getDoc(doc(db, "settings", "system"));
+                if (sysSnap.exists()) {
+                    const sysData = sysSnap.data();
+                    if (sysData.maintenanceMode && !isAdmin) {
+                        await signOut(auth);
+                        localStorage.removeItem('is_logged_in');
+                        document.body.innerHTML = `
+                            <div style="text-align:center;padding:120px 20px;color:#fff;font-family:sans-serif;background:#000;height:100vh;">
+                                <img src="https://i.ibb.co/TDtWKs5w/samos2.png" style="width:80px;height:80px;border-radius:50%;margin-bottom:20px;">
+                                <h2 style="color:#1d9bf0;font-size:1.8rem;margin-bottom:12px;">メンテナンス中</h2>
+                                <p style="color:#71767b;max-width:400px;margin:0 auto;line-height:1.6;">
+                                    ${escapeHtml(sysData.maintenanceNotice || "現在システムメンテナンスを行っております。管理者以外の方はアクセスできません。")}
+                                </p>
+                            </div>`;
+                        return;
+                    }
+                }
+
+                const ipRes = await fetch('https://api.ipify.org?format=json');
+                const ipData = await ipRes.json();
+                const currentIp = ipData.ip;
+
+                const blockedSnap = await getDocs(collection(db, "blocked_rules"));
+                let isBlocked = false;
+                blockedSnap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    if (data.value === currentIp || data.value === userEmail) {
+                        isBlocked = true;
+                    }
+                });
+
+                if (isBlocked) {
+                    await signOut(auth);
+                    localStorage.removeItem('is_logged_in');
+                    document.body.innerHTML = '<div style="text-align:center;padding-top:150px;color:#ef4444;font-family:sans-serif;background:#000;height:100vh;"><h2>アクセス禁止</h2><p>このアカウントまたはIPアドレスはブロックされています。</p></div>';
+                }
+            } catch (e) {
+                console.error("セキュリティ検証エラー:", e);
+            }
+        });
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+        }
+    </script>
+
+    <style>
+        :root {
+            --bg: #000000;
+            --card-bg: #16181c;
+            --border: #2f3336;
+            --accent: #1d9bf0;
+            --accent-hover: #1a8cd8;
+            --text: #e7e9ea;
+            --text-muted: #71767b;
+            --like-red: #f91880;
+            --navbar-h: 53px;
+        }
+
+        body.light-theme {
+            --bg: #ffffff;
+            --card-bg: #f7f9f9;
+            --border: #eff3f4;
+            --text: #0f1419;
+            --text-muted: #536471;
+        }
+
+        html { font-size: clamp(14px, 1vw + 10px, 16px); }
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body, html { width: 100%; height: 100%; background-color: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; overflow-x: hidden; transition: background-color 0.2s, color 0.2s; }
+
+        #app { display: flex; max-width: 1280px; margin: 0 auto; min-height: 100vh; position: relative; }
+        aside.left-sidebar { width: 260px; padding: 12px 16px; border-right: 1px solid var(--border); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; flex-shrink: 0; z-index: 50; }
+        .brand-logo { display: flex; align-items: center; gap: 12px; padding: 12px; color: var(--text); font-size: 1.3rem; font-weight: 800; text-decoration: none; cursor: pointer; }
+        .brand-logo img { width: 32px; height: 32px; border-radius: 50%; }
+
+        .nav-menu { list-style: none; margin-top: 10px; flex: 1; }
+        .nav-item { display: flex; align-items: center; gap: 16px; padding: 12px 16px; color: var(--text); text-decoration: none; font-size: 1.05rem; font-weight: 500; border-radius: 9999px; transition: background 0.2s; cursor: pointer; position: relative; }
+        .nav-item:hover { background: rgba(239, 243, 244, 0.1); }
+        .nav-item.active { font-weight: 700; }
+        .nav-item i { font-size: 1.3rem; width: 24px; text-align: center; }
+
+        .nav-badge-dot { background: var(--accent); color: #fff; font-size: 0.7rem; font-weight: bold; padding: 2px 6px; border-radius: 10px; margin-left: auto; }
+        .post-cta-btn { background: var(--accent); color: #fff; border: none; padding: 12px; border-radius: 9999px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 16px; width: 100%; transition: background 0.2s; }
+        .post-cta-btn:hover { background: var(--accent-hover); }
+
+        .user-account-bar { margin-top: auto; padding: 10px 12px; border-radius: 9999px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: background 0.2s; }
+        .user-account-bar:hover { background: rgba(239, 243, 244, 0.1); }
+        .user-avatar-small { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #333; flex-shrink: 0; }
+
+        main.main-timeline { flex: 1; min-width: 0; max-width: 600px; border-right: 1px solid var(--border); display: flex; flex-direction: column; position: relative; min-height: 100vh; }
+        .sticky-header { position: sticky; top: 0; background: var(--bg); opacity: 0.95; backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 12px 16px; z-index: 40; display: flex; justify-content: space-between; align-items: center; }
+        .sticky-header h2 { font-size: 1.2rem; font-weight: 700; }
+
+        aside.right-sidebar { width: 350px; padding: 12px 24px; display: none; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+        @media (min-width: 1024px) { aside.right-sidebar { display: block; } }
+
+        .widget-box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 16px; }
+        nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; width: 100%; height: var(--navbar-h); background: var(--bg); border-top: 1px solid var(--border); z-index: 50; justify-content: space-around; align-items: center; }
+        .mobile-nav-item { color: var(--text-muted); font-size: 1.25rem; display: flex; align-items: center; justify-content: center; width: 20%; height: 100%; position: relative; cursor: pointer; }
+        .mobile-nav-item.active { color: var(--text); }
+
+        @media (max-width: 768px) {
+            aside.left-sidebar { display: none; }
+            nav.mobile-bottom-nav { display: flex; }
+            main.main-timeline { max-width: 100%; border-right: none; padding-bottom: var(--navbar-h); }
+        }
+
+        .post-item { border-bottom: 1px solid var(--border); padding: 16px; display: flex; gap: 12px; cursor: pointer; transition: background 0.15s; }
+        .post-item:hover { background: rgba(150, 150, 150, 0.05); }
+        .post-user-info { flex: 1; min-width: 0; }
+        .post-meta { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; flex-wrap: wrap; }
+        .post-author { font-weight: 700; color: var(--text); cursor: pointer; }
+        .post-author:hover { text-decoration: underline; }
+        .post-handle, .post-time { color: var(--text-muted); font-size: 0.85rem; }
+        .post-title-text { font-size: 1.05rem; font-weight: 700; margin-top: 6px; color: var(--text); }
+        .post-body-text { font-size: 0.95rem; color: var(--text); margin-top: 4px; line-height: 1.45; word-break: break-word; white-space: pre-wrap; }
+
+        .post-tags-container { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .post-tag-badge { background: rgba(29, 155, 240, 0.1); color: var(--accent); font-size: 0.75rem; padding: 2px 8px; border-radius: 9999px; font-weight: 500; cursor: pointer; }
+
+        .post-content-row { display: flex; gap: 12px; margin-top: 8px; align-items: flex-start; }
+        .post-text-col { flex: 1; min-width: 0; }
+        .post-media-with-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .media-element { display: block; width: 140px; height: 140px; object-fit: cover; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; }
+        .youtube-iframe-fit { width: 180px; height: 120px; border: none; border-radius: 12px; }
+
+        .media-tiktok-actions { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+        .action-bubble { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+        .action-icon-circle { width: 32px; height: 32px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--text); font-size: 0.85rem; transition: transform 0.15s, color 0.15s; }
+        .action-icon-circle:active { transform: scale(0.85); }
+        .action-icon-circle.liked { color: var(--like-red); }
+        .action-icon-circle.bookmarked { color: var(--accent); }
+        .action-count-text { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); margin-top: 2px; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(91, 112, 131, 0.4); z-index: 100; display: none; align-items: center; justify-content: center; }
+        .modal-box { background: var(--bg); border: 1px solid var(--border); border-radius: 16px; width: 90%; max-width: 520px; padding: 20px; max-height: 90vh; overflow-y: auto; color: var(--text); }
+
+        .sub-page-overlay { position: absolute; inset: 0; background: var(--bg); z-index: 60; display: none; flex-direction: column; min-height: 100vh; }
+        .form-input { width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 0.9rem; outline: none; margin-bottom: 12px; }
+
+        .notification-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); transition: background 0.2s; }
+        .notification-card.unread { background: rgba(29, 155, 240, 0.05); }
+
+        .notif-icon { font-size: 1.2rem; margin-top: 2px; }
+        .notif-icon.like { color: var(--like-red); }
+        .notif-icon.comment { color: var(--accent); }
+        .notif-icon.follow { color: var(--text); }
+
+        .profile-banner { height: 130px; background: #222; background-size: cover; background-position: center; }
+        .profile-header-details { padding: 16px; position: relative; border-bottom: 1px solid var(--border); }
+        .profile-avatar-large { width: 80px; height: 80px; border-radius: 50%; border: 4px solid var(--bg); position: absolute; top: -40px; left: 16px; background: #222; object-fit: cover; }
+        .detail-media-large { width: 100%; max-height: 380px; object-fit: contain; background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); margin: 12px 0; }
+
+        .profile-tabs, .home-tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; }
+        .profile-tab-item, .home-tab-item { flex: 1; text-align: center; padding: 14px 8px; font-weight: 700; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; transition: background 0.2s, color 0.2s; white-space: nowrap; }
+        .profile-tab-item:hover, .home-tab-item:hover { background: rgba(150,150,150,0.05); }
+        .profile-tab-item.active, .home-tab-item.active { color: var(--text); border-bottom: 2px solid var(--accent); }
+
+        .media-option-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+        .media-tab-btn { flex: 1; padding: 6px; font-size: 0.8rem; background: var(--card-bg); border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; cursor: pointer; text-align: center; }
+        .media-tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+        .trend-item { padding: 8px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+        .trend-item:hover { opacity: 0.8; }
+        .trend-tag { font-weight: bold; color: var(--accent); font-size: 0.9rem; }
+        .trend-count { font-size: 0.75rem; color: var(--text-muted); }
+
+        .chat-bubble { max-width: 75%; padding: 10px 14px; border-radius: 16px; font-size: 0.9rem; line-height: 1.4; word-break: break-word; margin-bottom: 8px; }
+        .chat-bubble.mine { background: var(--accent); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
+        .chat-bubble.other { background: var(--card-bg); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 4px; }
+
+        .status-badge { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+        .status-online { background-color: #22c55e; }
+        .status-away { background-color: #eab308; }
+        .status-busy { background-color: #ef4444; }
+        .status-offline { background-color: #9ca3af; }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { 
+            getFirestore, doc, setDoc, deleteDoc, collection, getDoc, 
+            query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, increment, where, arrayUnion, arrayRemove 
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { 
+            getAuth, onAuthStateChanged, signOut 
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
+            authDomain: "my-ball-wiki.firebaseapp.com",
+            projectId: "my-ball-wiki",
+            storageBucket: "my-ball-wiki.firebasestorage.app",
+            messagingSenderId: "1004863748430",
+            appId: "1:1004863748430:web:584e16403e2eb87c90861f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        const ADMIN_UIDS = ['samon53577'];
+        const ADMIN_EMAILS = ['admin@example.com'];
+
+        function getAdminBadge(uid, email = null) {
+            if ((uid && ADMIN_UIDS.includes(uid)) || (email && ADMIN_EMAILS.includes(email))) {
+                return `<i class="fa-solid fa-circle-check" style="color: var(--accent); margin-left: 4px;" title="公式管理者アカウント"></i>`;
+            }
+            return '';
+        }
+
+        const STATUS_MAP = {
+            online: { label: 'オンライン', class: 'status-online' },
+            away: { label: '離席中', class: 'status-away' },
+            busy: { label: '取り込み中', class: 'status-busy' },
+            offline: { label: 'オフライン', class: 'status-offline' }
+        };
+
+        function getStatusHtml(status) {
+            const st = STATUS_MAP[status] || STATUS_MAP.online;
+            return `<span class="status-badge ${st.class}" title="${st.label}"></span>`;
+        }
+
+        let currentUser = null;
+        let allPosts = [];
+        let userFollowings = [];
+        let userBookmarks = [];
+        let activeCommentsPostId = null;
+        let currentProfileUid = null;
+        let currentProfileTab = 'posts';
+        let currentHomeTab = 'all';
+        let currentMediaInputMode = 'url';
+        let editingPostId = null;
+        let activeChatTargetUid = null;
+        let activeChatRoomId = null;
+        let myCurrentStatus = 'online';
+
+        let targetReportType = null;
+        let targetReportId = null;
+
+        window.toggleTheme = () => {
+            document.body.classList.toggle('light-theme');
+            const isLight = document.body.classList.contains('light-theme');
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            document.getElementById('theme-icon').className = isLight ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'light') {
+                document.body.classList.add('light-theme');
+                const icon = document.getElementById('theme-icon');
+                if (icon) icon.className = 'fa-solid fa-sun';
+            }
+        });
+
+        function pushNavState(state, title = "") {
+            window.history.pushState(state, title, "#" + (state.view || "home"));
+            applyNavState(state);
+        }
+
+        function applyNavState(state) {
+            if (!state) state = { view: 'home' };
+
+            hideAllSubPages();
+            hideAllModals();
+
+            switch (state.view) {
+                case 'search':
+                    document.getElementById('search-page').style.display = 'flex';
+                    updateNavActive('search');
+                    if (state.query) {
+                        document.getElementById('search-input-box').value = state.query;
+                    }
+                    runSearch();
+                    break;
+                case 'notif':
+                    document.getElementById('notification-page').style.display = 'flex';
+                    updateNavActive('notif');
+                    break;
+                case 'dm':
+                    document.getElementById('dm-page').style.display = 'flex';
+                    updateNavActive('dm');
+                    renderDmRoomList();
+                    break;
+                case 'profile':
+                    document.getElementById('profile-page').style.display = 'flex';
+                    updateNavActive('profile');
+                    currentProfileUid = state.uid || (currentUser ? currentUser.uid : null);
+                    renderProfilePage(currentProfileUid);
+                    break;
+                case 'terms':
+                    document.getElementById('terms-page').style.display = 'flex';
+                    break;
+                case 'home':
+                default:
+                    updateNavActive('home');
+                    break;
+            }
+
+            if (state.modal === 'comments') {
+                document.getElementById('comments-modal').style.display = 'flex';
+            } else if (state.modal === 'post') {
+                document.getElementById('post-modal').style.display = 'flex';
+            } else if (state.modal === 'edit-profile') {
+                document.getElementById('edit-profile-modal').style.display = 'flex';
+            } else if (state.modal === 'post-detail' && state.postId) {
+                renderPostDetailModal(state.postId);
+                document.getElementById('post-detail-modal').style.display = 'flex';
+            } else if (state.modal === 'chat' && state.targetUid) {
+                openChatModal(state.targetUid);
+            } else if (state.modal === 'report') {
+                document.getElementById('report-modal').style.display = 'flex';
+            } else if (state.modal === 'request') {
+                document.getElementById('request-modal').style.display = 'flex';
+            }
+        }
+
+        window.addEventListener('popstate', (e) => applyNavState(e.state));
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!window.history.state) {
+                window.history.replaceState({ view: 'home' }, '', '#home');
+            } else {
+                applyNavState(window.history.state);
+            }
+        });
+
+        function hideAllSubPages() {
+            document.getElementById('search-page').style.display = 'none';
+            document.getElementById('notification-page').style.display = 'none';
+            document.getElementById('dm-page').style.display = 'none';
+            document.getElementById('profile-page').style.display = 'none';
+            document.getElementById('terms-page').style.display = 'none';
+        }
+
+        function hideAllModals() {
+            document.getElementById('comments-modal').style.display = 'none';
+            document.getElementById('post-modal').style.display = 'none';
+            document.getElementById('edit-profile-modal').style.display = 'none';
+            document.getElementById('post-detail-modal').style.display = 'none';
+            document.getElementById('chat-modal').style.display = 'none';
+            document.getElementById('report-modal').style.display = 'none';
+            document.getElementById('request-modal').style.display = 'none';
+        }
+
+        function updateNavActive(view) {
+            document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(el => el.classList.remove('active'));
+            const desktopItem = document.getElementById(`nav-${view}`);
+            const mobileItem = document.getElementById(`mob-nav-${view}`);
+            if (desktopItem) desktopItem.classList.add('active');
+            if (mobileItem) mobileItem.classList.add('active');
+        }
+
+        window.logout = () => {
+            signOut(auth);
+            localStorage.removeItem('is_logged_in');
+            window.location.href = 'login.html';
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+            currentUser = user;
+            const authBox = document.getElementById('auth-user-box');
+
+            if (user) {
+                const userRef = doc(db, "users", user.uid);
+                const snap = await getDoc(userRef);
+                if (!snap.exists()) {
+                    await setDoc(userRef, {
+                        uid: user.uid,
+                        email: user.email || "",
+                        customId: user.uid.slice(0, 6),
+                        displayName: user.displayName || "ユーザー",
+                        photoURL: user.photoURL || "https://i.imgur.com/CcBLZ0O.png",
+                        bannerURL: "",
+                        bio: "さもっとーへようこそ！",
+                        status: "online",
+                        following: [],
+                        followers: [],
+                        bookmarks: [],
+                        createdAt: new Date().toISOString()
+                    });
+                    userFollowings = [];
+                    userBookmarks = [];
+                    myCurrentStatus = 'online';
+                } else {
+                    const uData = snap.data();
+                    userFollowings = uData.following || [];
+                    userBookmarks = uData.bookmarks || [];
+                    myCurrentStatus = uData.status || 'online';
+                    if (!uData.email && user.email) {
+                        await updateDoc(userRef, { email: user.email });
+                    }
+                }
+
+                const userData = snap.exists() ? snap.data() : {};
+                const currentName = userData.displayName || user.displayName || "ユーザー";
+                const currentPhoto = userData.photoURL || user.photoURL || "https://i.imgur.com/CcBLZ0O.png";
+                const customId = userData.customId || user.uid.slice(0, 6);
+                const userEmail = userData.email || user.email || "";
+
+                const isAdmin = ADMIN_UIDS.includes(user.uid) || ADMIN_EMAILS.includes(userEmail);
+                const adminNav = document.getElementById('nav-admin-reports');
+                if (isAdmin && adminNav) {
+                    adminNav.style.display = 'flex';
+                }
+
+                authBox.innerHTML = `
+                    <img src="${currentPhoto}" class="user-avatar-small" onclick="event.stopPropagation(); navigateToProfile('${user.uid}')">
+                    <div style="flex:1; overflow:hidden;" onclick="event.stopPropagation(); navigateToProfile('${user.uid}')">
+                        <div style="font-weight:700; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${getStatusHtml(myCurrentStatus)} ${escapeHtml(currentName)} ${getAdminBadge(user.uid, userEmail)}
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--text-muted);">@${escapeHtml(customId)}</div>
+                    </div>
+                    <i class="fa-solid fa-arrow-right-from-bracket" onclick="event.stopPropagation(); logout()" style="color:var(--text-muted); font-size:0.9rem;"></i>
+                `;
+
+                listenNotifications(user.uid);
+            } else {
+                authBox.innerHTML = `<button onclick="window.location.href='login.html'" class="post-cta-btn" style="margin:0; padding:8px 16px;">ログイン</button>`;
+            }
+
+            listenPosts();
+        });
+
+        window.updateMyStatus = async (status) => {
+            if (!currentUser) return;
+            myCurrentStatus = status;
+            await updateDoc(doc(db, "users", currentUser.uid), { status: status });
+            
+            const userSnap = await getDoc(doc(db, "users", currentUser.uid));
+            if (userSnap.exists()) {
+                const userData = userSnap.data();
+                const authBox = document.getElementById('auth-user-box');
+                authBox.innerHTML = `
+                    <img src="${userData.photoURL || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small" onclick="event.stopPropagation(); navigateToProfile('${currentUser.uid}')">
+                    <div style="flex:1; overflow:hidden;" onclick="event.stopPropagation(); navigateToProfile('${currentUser.uid}')">
+                        <div style="font-weight:700; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${getStatusHtml(myCurrentStatus)} ${escapeHtml(userData.displayName)} ${getAdminBadge(currentUser.uid, userData.email)}
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--text-muted);">@${escapeHtml(userData.customId || currentUser.uid.slice(0,6))}</div>
+                    </div>
+                    <i class="fa-solid fa-arrow-right-from-bracket" onclick="event.stopPropagation(); logout()" style="color:var(--text-muted); font-size:0.9rem;"></i>
+                `;
+            }
+        };
+
+        window.openReportModal = (type, targetId) => {
+            if (!currentUser) return alert("通報するにはログインが必要です。");
+            targetReportType = type;
+            targetReportId = targetId;
+
+            document.getElementById('report-target-label').innerText = type === 'post' ? `投稿 (ID: ${targetId})` : `ユーザー (ID: ${targetId})`;
+            document.getElementById('report-reason-in').value = 'スパム・荒らし';
+            document.getElementById('report-detail-in').value = '';
+
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'report' });
+        };
+
+        window.submitReport = async () => {
+            if (!currentUser || !targetReportId) return;
+            const reason = document.getElementById('report-reason-in').value;
+            const detail = document.getElementById('report-detail-in').value.trim();
+
+            try {
+                await addDoc(collection(db, "reports"), {
+                    type: targetReportType,
+                    targetId: targetReportId,
+                    reporterUid: currentUser.uid,
+                    reporterName: currentUser.displayName || 'ユーザー',
+                    reporterEmail: currentUser.email || '',
+                    reason: reason,
+                    detail: detail,
+                    status: 'pending',
+                    createdAt: serverTimestamp()
+                });
+                alert("通報を受理しました。ご報告ありがとうございます。");
+                goBack();
+            } catch (e) {
+                alert("送信に失敗しました: " + e.message);
+            }
+        };
+
+        window.openRequestModal = () => {
+            if (!currentUser) return alert("要望を送信するにはログインが必要です。");
+            document.getElementById('request-detail-in').value = '';
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'request' });
+        };
+
+        window.submitRequest = async () => {
+            if (!currentUser) return;
+            const category = document.getElementById('request-category-in').value;
+            const detail = document.getElementById('request-detail-in').value.trim();
+
+            if (!detail) return alert("内容を入力してください。");
+
+            try {
+                await addDoc(collection(db, "user_requests"), {
+                    category: category,
+                    detail: detail,
+                    senderUid: currentUser.uid,
+                    senderName: currentUser.displayName || 'ユーザー',
+                    senderEmail: currentUser.email || '',
+                    status: 'unread',
+                    createdAt: serverTimestamp()
+                });
+                alert("運営へ要望を送信しました！貴重なご意見ありがとうございます。");
+                goBack();
+            } catch (e) {
+                alert("送信に失敗しました: " + e.message);
+            }
+        };
+
+        let notifUnsub = null;
+        function listenNotifications(uid) {
+            if (notifUnsub) notifUnsub();
+
+            const q = query(
+                collection(db, "notifications"), 
+                where("targetUid", "==", uid), 
+                orderBy("createdAt", "desc")
+            );
+
+            notifUnsub = onSnapshot(q, (snapshot) => {
+                const notifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderNotifications(notifications);
+            });
+        }
+
+        async function createNotification(targetUid, type, text) {
+            if (!currentUser || currentUser.uid === targetUid) return;
+
+            await addDoc(collection(db, "notifications"), {
+                targetUid: targetUid,
+                senderUid: currentUser.uid,
+                senderName: currentUser.displayName,
+                senderPhoto: currentUser.photoURL,
+                type: type,
+                text: text,
+                read: false,
+                createdAt: serverTimestamp()
+            });
+        }
+
+        function renderNotifications(notifications) {
+            const container = document.getElementById('notification-list');
+            const unreadCount = notifications.filter(n => !n.read).length;
+
+            const badge = document.getElementById('notif-badge');
+            if (unreadCount > 0) {
+                badge.style.display = 'inline-block';
+                badge.innerText = unreadCount;
+            } else {
+                badge.style.display = 'none';
+            }
+
+            if (notifications.length === 0) {
+                container.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:40px;">新しい通知はありません。</p>`;
+                return;
+            }
+
+            container.innerHTML = notifications.map(n => {
+                let iconClass = 'fa-heart notif-icon like';
+                if (n.type === 'comment') iconClass = 'fa-comment notif-icon comment';
+                if (n.type === 'follow') iconClass = 'fa-user-plus notif-icon follow';
+
+                const timeStr = n.createdAt ? new Date(n.createdAt.seconds * 1000).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'たった今';
+
+                return `
+                    <div class="notification-card ${n.read ? '' : 'unread'}" onclick="markNotifRead('${n.id}'); navigateToProfile('${n.senderUid}')">
+                        <i class="fa-solid ${iconClass}"></i>
+                        <img src="${n.senderPhoto || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small" style="width:32px; height:32px;" onclick="event.stopPropagation(); navigateToProfile('${n.senderUid}')">
+                        <div style="flex:1;">
+                            <div><strong style="color:var(--text);" onclick="event.stopPropagation(); navigateToProfile('${n.senderUid}')">${escapeHtml(n.senderName)} ${getAdminBadge(n.senderUid, n.senderEmail)}</strong> <span style="font-size:0.85rem; color:var(--text-muted);">${n.text}</span></div>
+                            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${timeStr}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        window.markNotifRead = async (id) => {
+            await updateDoc(doc(db, "notifications", id), { read: true });
+        };
+
+        let postsUnsub = null;
+        function listenPosts() {
+            if (postsUnsub) postsUnsub();
+            const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+
+            postsUnsub = onSnapshot(q, (snapshot) => {
+                allPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderPosts();
+                renderTrends();
+                if (document.getElementById('search-page').style.display === 'flex') {
+                    runSearch();
+                }
+                if (document.getElementById('profile-page').style.display === 'flex' && currentProfileUid) {
+                    renderProfilePage(currentProfileUid);
+                }
+            });
+        }
+
+        function renderTrends() {
+            const trendMap = {};
+            allPosts.forEach(post => {
+                if (post.tags && Array.isArray(post.tags)) {
+                    post.tags.forEach(tag => {
+                        trendMap[tag] = (trendMap[tag] || 0) + 1;
+                    });
+                }
+            });
+
+            const sortedTrends = Object.entries(trendMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+
+            const container = document.getElementById('trend-widget-list');
+            if (sortedTrends.length === 0) {
+                container.innerHTML = `<p style="font-size:0.8rem; color:var(--text-muted);">トレンドタグはありません。</p>`;
+                return;
+            }
+
+            container.innerHTML = sortedTrends.map(([tag, count]) => `
+                <div class="trend-item" onclick="searchByTag('${escapeHtml(tag)}')">
+                    <div class="trend-tag">#${escapeHtml(tag)}</div>
+                    <div class="trend-count">${count}件のポスト</div>
+                </div>
+            `).join('');
+        }
+
+        window.searchByTag = (tag) => {
+            pushNavState({ view: 'search', query: '#' + tag });
+        };
+
+        window.switchHomeTab = (tab) => {
+            currentHomeTab = tab;
+            document.querySelectorAll('.home-tab-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`home-tab-${tab}`).classList.add('active');
+            renderPosts();
+        };
+
+        function renderPosts() {
+            const feed = document.getElementById('timeline-feed');
+            
+            let displayPosts = allPosts;
+            if (currentHomeTab === 'following') {
+                displayPosts = allPosts.filter(post => userFollowings.includes(post.uid) || (currentUser && post.uid === currentUser.uid));
+            }
+
+            if (displayPosts.length === 0) {
+                feed.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:40px;">投稿がありません。「＋」ボタンから投稿してみましょう！</p>`;
+                return;
+            }
+
+            feed.innerHTML = displayPosts.map(post => {
+                const isLiked = currentUser && post.likedBy && post.likedBy.includes(currentUser.uid);
+                const isBookmarked = userBookmarks.includes(post.id);
+                const isFollowing = currentUser && userFollowings.includes(post.uid);
+                const timeStr = post.createdAt ? new Date(post.createdAt.seconds * 1000).toLocaleDateString('ja-JP') : '';
+
+                let tagsHtml = '';
+                if (post.tags && post.tags.length > 0) {
+                    tagsHtml = `<div class="post-tags-container">` + 
+                        post.tags.map(tag => `<span class="post-tag-badge" onclick="event.stopPropagation(); searchByTag('${escapeHtml(tag)}')">#${escapeHtml(tag)}</span>`).join('') + 
+                    `</div>`;
+                }
+
+                let mediaHtml = '';
+                if (post.mediaUrl) {
+                    if (post.mediaUrl.includes('youtube.com') || post.mediaUrl.includes('youtu.be')) {
+                        const ytId = post.mediaUrl.split('v=')[1] || post.mediaUrl.split('/').pop();
+                        mediaHtml = `
+                            <div class="post-media-with-actions">
+                                <iframe class="youtube-iframe-fit" src="https://www.youtube.com/embed/${ytId}" allowfullscreen></iframe>
+                                ${renderTiktokActions(post, isLiked, isBookmarked)}
+                            </div>
+                        `;
+                    } else if (post.mediaUrl.match(/\.(mp4|webm|mov)$/i) || post.mediaUrl.startsWith('data:video')) {
+                        mediaHtml = `
+                            <div class="post-media-with-actions">
+                                <video class="media-element" src="${post.mediaUrl}" controls loop playsinline></video>
+                                ${renderTiktokActions(post, isLiked, isBookmarked)}
+                            </div>
+                        `;
+                    } else {
+                        mediaHtml = `
+                            <div class="post-media-with-actions">
+                                <img class="media-element" src="${post.mediaUrl}" loading="lazy">
+                                ${renderTiktokActions(post, isLiked, isBookmarked)}
+                            </div>
+                        `;
+                    }
+                } else {
+                    mediaHtml = renderTiktokActions(post, isLiked, isBookmarked);
+                }
+
+                return `
+                    <div class="post-item" onclick="openPostDetailModal('${post.id}')">
+                        <img src="${post.authorPhoto || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small" onclick="event.stopPropagation(); navigateToProfile('${post.uid}')">
+                        <div class="post-user-info">
+                            <div class="post-meta">
+                                <span class="post-author" onclick="event.stopPropagation(); navigateToProfile('${post.uid}')">${escapeHtml(post.authorName)} ${getAdminBadge(post.uid, post.authorEmail)}</span>
+                                <span class="post-handle" onclick="event.stopPropagation(); navigateToProfile('${post.uid}')">@${escapeHtml(post.customId || post.uid.slice(0,6))}</span>
+                                <span class="post-time">・ ${timeStr}</span>
+                                ${currentUser && currentUser.uid !== post.uid ? `
+                                    <button class="post-cta-btn" onclick="event.stopPropagation(); toggleFollow('${post.uid}')" style="margin:0 0 0 auto; width:auto; padding:4px 12px; font-size:0.75rem; background:${isFollowing ? 'transparent' : 'var(--accent)'}; border:${isFollowing ? '1px solid var(--border)' : 'none'}; color:var(--text);">
+                                        ${isFollowing ? 'フォロー中' : 'フォロー'}
+                                    </button>
+                                ` : ''}
+                            </div>
+                            <div class="post-content-row">
+                                <div class="post-text-col">
+                                    ${post.title ? `<div class="post-title-text">${escapeHtml(post.title)}</div>` : ''}
+                                    <div class="post-body-text">${escapeHtml(post.text)}</div>
+                                    ${tagsHtml}
+                                </div>
+                                ${mediaHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderTiktokActions(post, isLiked, isBookmarked) {
+            const isOwner = currentUser && currentUser.uid === post.uid;
+
+            return `
+                <div class="media-tiktok-actions" onclick="event.stopPropagation()">
+                    <div class="action-bubble" onclick="toggleLike('${post.id}', '${post.uid}')">
+                        <div class="action-icon-circle ${isLiked ? 'liked' : ''}">
+                            <i class="fa-solid fa-heart"></i>
+                        </div>
+                        <span class="action-count-text">${post.likesCount || 0}</span>
+                    </div>
+
+                    <div class="action-bubble" onclick="openCommentsModal('${post.id}')">
+                        <div class="action-icon-circle">
+                            <i class="fa-solid fa-comment"></i>
+                        </div>
+                        <span class="action-count-text">${post.commentsCount || 0}</span>
+                    </div>
+
+                    <div class="action-bubble" onclick="toggleBookmark('${post.id}')">
+                        <div class="action-icon-circle ${isBookmarked ? 'bookmarked' : ''}">
+                            <i class="fa-solid fa-bookmark"></i>
+                        </div>
+                        <span class="action-count-text">保存</span>
+                    </div>
+
+                    <div class="action-bubble" onclick="openReportModal('post', '${post.id}')">
+                        <div class="action-icon-circle" style="color:var(--text-muted);" title="投稿を通報">
+                            <i class="fa-solid fa-flag"></i>
+                        </div>
+                        <span class="action-count-text">通報</span>
+                    </div>
+
+                    ${isOwner ? `
+                        <div class="action-bubble" onclick="openEditPostModal('${post.id}')">
+                            <div class="action-icon-circle" style="color:var(--accent);">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </div>
+                            <span class="action-count-text" style="color:var(--accent);">編集</span>
+                        </div>
+                        <div class="action-bubble" onclick="deletePost('${post.id}')">
+                            <div class="action-icon-circle" style="color:#ef4444;">
+                                <i class="fa-solid fa-trash"></i>
+                            </div>
+                            <span class="action-count-text" style="color:#ef4444;">削除</span>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        window.toggleBookmark = async (postId) => {
+            if (!currentUser) return alert("ブックマークするにはログインが必要です。");
+
+            const myRef = doc(db, "users", currentUser.uid);
+            const isBookmarked = userBookmarks.includes(postId);
+
+            if (isBookmarked) {
+                userBookmarks = userBookmarks.filter(id => id !== postId);
+                await updateDoc(myRef, { bookmarks: arrayRemove(postId) });
+            } else {
+                userBookmarks.push(postId);
+                await updateDoc(myRef, { bookmarks: arrayUnion(postId) });
+            }
+
+            renderPosts();
+            if (document.getElementById('profile-page').style.display === 'flex' && currentProfileUid) {
+                renderProfilePage(currentProfileUid, false);
+            }
+        };
+
+        window.openPostDetailModal = (postId) => {
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'post-detail', postId: postId });
+        };
+
+        function renderPostDetailModal(postId) {
+            const post = allPosts.find(p => p.id === postId);
+            const container = document.getElementById('post-detail-container');
+
+            if (!post) {
+                container.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:20px;">投稿が見つかりませんでした。</p>`;
+                return;
+            }
+
+            const isLiked = currentUser && post.likedBy && post.likedBy.includes(currentUser.uid);
+            const isBookmarked = userBookmarks.includes(post.id);
+            const isOwner = currentUser && currentUser.uid === post.uid;
+            const timeStr = post.createdAt ? new Date(post.createdAt.seconds * 1000).toLocaleString('ja-JP') : '';
+
+            let mediaHtml = '';
+            if (post.mediaUrl) {
+                if (post.mediaUrl.includes('youtube.com') || post.mediaUrl.includes('youtu.be')) {
+                    const ytId = post.mediaUrl.split('v=')[1] || post.mediaUrl.split('/').pop();
+                    mediaHtml = `<iframe style="width:100%; height:260px; border-radius:12px; margin:12px 0;" src="https://www.youtube.com/embed/${ytId}" allowfullscreen></iframe>`;
+                } else if (post.mediaUrl.match(/\.(mp4|webm|mov)$/i) || post.mediaUrl.startsWith('data:video')) {
+                    mediaHtml = `<video class="detail-media-large" src="${post.mediaUrl}" controls loop playsinline></video>`;
+                } else {
+                    mediaHtml = `<img class="detail-media-large" src="${post.mediaUrl}">`;
+                }
+            }
+
+            let tagsHtml = '';
+            if (post.tags && post.tags.length > 0) {
+                tagsHtml = `<div class="post-tags-container" style="margin-top:12px;">` + 
+                    post.tags.map(tag => `<span class="post-tag-badge" onclick="goBack(); searchByTag('${escapeHtml(tag)}')">#${escapeHtml(tag)}</span>`).join('') + 
+                `</div>`;
+            }
+
+            container.innerHTML = `
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <img src="${post.authorPhoto || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small" onclick="goBack(); navigateToProfile('${post.uid}')">
+                    <div>
+                        <div style="font-weight:700; color:var(--text); cursor:pointer;" onclick="goBack(); navigateToProfile('${post.uid}')">${escapeHtml(post.authorName)} ${getAdminBadge(post.uid, post.authorEmail)}</div>
+                        <div style="font-size:0.8rem; color:var(--text-muted);" onclick="goBack(); navigateToProfile('${post.uid}')">@${escapeHtml(post.customId || post.uid.slice(0,6))}</div>
+                    </div>
+                </div>
+
+                ${post.title ? `<h2 style="font-size:1.2rem; margin-top:16px;">${escapeHtml(post.title)}</h2>` : ''}
+                <div style="font-size:1rem; margin-top:10px; line-height:1.5; white-space:pre-wrap;">${escapeHtml(post.text)}</div>
+                ${tagsHtml}
+                ${mediaHtml}
+
+                <div style="font-size:0.8rem; color:var(--text-muted); margin-top:12px;">投稿日時: ${timeStr}</div>
+
+                <div style="display:flex; gap:20px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding:12px 0; margin-top:16px; justify-content:space-around;">
+                    <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:${isLiked ? 'var(--like-red)' : 'var(--text)'};" onclick="toggleLike('${post.id}', '${post.uid}')">
+                        <i class="fa-solid fa-heart"></i> <span>${post.likesCount || 0} いいね</span>
+                    </div>
+                    <div style="cursor:pointer; display:flex; align-items:center; gap:6px;" onclick="openCommentsModal('${post.id}')">
+                        <i class="fa-solid fa-comment"></i> <span>${post.commentsCount || 0} コメント</span>
+                    </div>
+                    <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:${isBookmarked ? 'var(--accent)' : 'var(--text)'};" onclick="toggleBookmark('${post.id}')">
+                        <i class="fa-solid fa-bookmark"></i> <span>保存</span>
+                    </div>
+                    <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:var(--text-muted);" onclick="openReportModal('post', '${post.id}')">
+                        <i class="fa-solid fa-flag"></i> <span>通報</span>
+                    </div>
+                    ${isOwner ? `
+                        <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:var(--accent);" onclick="openEditPostModal('${post.id}')">
+                            <i class="fa-solid fa-pen-to-square"></i> <span>編集</span>
+                        </div>
+                        <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:#ef4444;" onclick="deletePost('${post.id}')">
+                            <i class="fa-solid fa-trash"></i> <span>削除</span>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        window.toggleLike = async (postId, targetUid, forceLike = false) => {
+            if (!currentUser) return alert("いいねするにはログインが必要です。");
+
+            const postRef = doc(db, "posts", postId);
+            const postSnap = await getDoc(postRef);
+            if (!postSnap.exists()) return;
+
+            const post = postSnap.data();
+            let likedBy = post.likedBy || [];
+            const hasLiked = likedBy.includes(currentUser.uid);
+
+            if (hasLiked && !forceLike) {
+                likedBy = likedBy.filter(id => id !== currentUser.uid);
+                await updateDoc(postRef, { likedBy: likedBy, likesCount: increment(-1) });
+            } else if (!hasLiked) {
+                likedBy.push(currentUser.uid);
+                await updateDoc(postRef, { likedBy: likedBy, likesCount: increment(1) });
+                createNotification(targetUid || post.uid, 'like', 'があなたの投稿に「いいね」しました。');
+            }
+
+            if (document.getElementById('post-detail-modal').style.display === 'flex') {
+                renderPostDetailModal(postId);
+            }
+        };
+
+        window.toggleFollow = async (targetUid) => {
+            if (!currentUser) return alert("フォローするにはログインが必要です。");
+            if (currentUser.uid === targetUid) return;
+
+            const myRef = doc(db, "users", currentUser.uid);
+            const targetRef = doc(db, "users", targetUid);
+
+            const isFollowing = userFollowings.includes(targetUid);
+
+            try {
+                if (isFollowing) {
+                    userFollowings = userFollowings.filter(id => id !== targetUid);
+                    await updateDoc(myRef, { following: arrayRemove(targetUid) });
+                    await updateDoc(targetRef, { followers: arrayRemove(currentUser.uid) });
+                } else {
+                    userFollowings.push(targetUid);
+                    await updateDoc(myRef, { following: arrayUnion(targetUid) });
+                    await updateDoc(targetRef, { followers: arrayUnion(currentUser.uid) });
+                    createNotification(targetUid, 'follow', 'があなたをフォローし始めました。');
+                }
+
+                renderPosts();
+                if (document.getElementById('profile-page').style.display === 'flex' && currentProfileUid) {
+                    renderProfilePage(currentProfileUid);
+                }
+            } catch (e) {
+                console.error("フォローエラー:", e);
+                alert("フォロー処理に失敗しました。");
+            }
+        };
+
+        let commentsUnsub = null;
+        window.openCommentsModal = (postId) => {
+            activeCommentsPostId = postId;
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'comments' });
+
+            const q = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
+            if (commentsUnsub) commentsUnsub();
+
+            commentsUnsub = onSnapshot(q, (snapshot) => {
+                const list = document.getElementById('comments-container');
+                const comments = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                list.innerHTML = comments.map(c => `
+                    <div style="padding:10px 0; border-bottom:1px solid var(--border); font-size:0.9rem;">
+                        <div style="display:flex; gap:10px;">
+                            <img src="${c.authorPhoto || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small" style="width:32px; height:32px;" onclick="goBack(); navigateToProfile('${c.uid}')">
+                            <div style="flex:1;">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div style="font-weight:700; color:var(--text-muted); font-size:0.8rem; cursor:pointer;" onclick="goBack(); navigateToProfile('${c.uid}')">${escapeHtml(c.authorName)} ${getAdminBadge(c.uid, c.authorEmail)}</div>
+                                    <button onclick="setReplyTarget('${escapeHtml(c.authorName)}')" style="background:none; border:none; color:var(--accent); font-size:0.75rem; cursor:pointer;"><i class="fa-solid fa-reply"></i> 返信する</button>
+                                </div>
+                                <div style="color:var(--text); margin-top:2px;">${escapeHtml(c.text)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('') || `<p style="color:var(--text-muted); text-align:center; padding:40px;">コメントはまだありません。</p>`;
+            });
+        };
+
+        window.setReplyTarget = (authorName) => {
+            const input = document.getElementById('comment-input');
+            input.value = `@${authorName} `;
+            input.focus();
+        };
+
+        window.submitComment = async () => {
+            if (!currentUser) return alert("コメントするにはログインが必要です。");
+            const input = document.getElementById('comment-input');
+            const text = input.value.trim();
+            if (!text || !activeCommentsPostId) return;
+
+            const postRef = doc(db, "posts", activeCommentsPostId);
+            const postSnap = await getDoc(postRef);
+
+            await addDoc(collection(db, "posts", activeCommentsPostId, "comments"), {
+                uid: currentUser.uid,
+                authorName: currentUser.displayName,
+                authorPhoto: currentUser.photoURL,
+                authorEmail: currentUser.email || "",
+                text: text,
+                createdAt: serverTimestamp()
+            });
+
+            await updateDoc(postRef, { commentsCount: increment(1) });
+
+            if (postSnap.exists()) {
+                createNotification(postSnap.data().uid, 'comment', `がコメントしました: "${text.slice(0, 15)}..."`);
+            }
+
+            input.value = "";
+        };
+
+        window.openPostModal = () => {
+            if (!currentUser) return window.location.href = 'login.html';
+            editingPostId = null;
+            document.getElementById('post-modal-title').innerText = "新規ポスト";
+            document.getElementById('post-title-in').value = "";
+            document.getElementById('post-text-in').value = "";
+            document.getElementById('post-media-in').value = "";
+            document.getElementById('post-media-file-in').value = "";
+            document.getElementById('post-tags-in').value = "";
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'post' });
+        };
+
+        window.openEditPostModal = (postId) => {
+            const post = allPosts.find(p => p.id === postId);
+            if (!post) return;
+
+            editingPostId = postId;
+            document.getElementById('post-modal-title').innerText = "ポストを編集";
+            document.getElementById('post-title-in').value = post.title || '';
+            document.getElementById('post-text-in').value = post.text || '';
+            document.getElementById('post-media-in').value = post.mediaUrl || '';
+            document.getElementById('post-tags-in').value = post.tags ? post.tags.join(', ') : '';
+
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'post' });
+        };
+
+        window.switchMediaMode = (mode) => {
+            currentMediaInputMode = mode;
+            document.querySelectorAll('.media-tab-btn').forEach(btn => btn.classList.remove('active'));
+            if (mode === 'url') {
+                document.getElementById('tab-btn-url').classList.add('active');
+                document.getElementById('post-media-url-area').style.display = 'block';
+                document.getElementById('post-media-file-area').style.display = 'none';
+            } else {
+                document.getElementById('tab-btn-upload').classList.add('active');
+                document.getElementById('post-media-url-area').style.display = 'none';
+                document.getElementById('post-media-file-area').style.display = 'block';
+            }
+        };
+
+        window.submitNewPost = async () => {
+            if (!currentUser) return alert("投稿するにはログインが必要です。");
+            const title = document.getElementById('post-title-in').value.trim();
+            const text = document.getElementById('post-text-in').value.trim();
+            const tagsRaw = document.getElementById('post-tags-in').value.trim();
+
+            if (!text && !title) return alert("本文またはタイトルを入力してください。");
+
+            if (document.getElementById('post-hp-field').value !== "") {
+                return alert("不正な操作が検知されました。");
+            }
+
+            let mediaUrl = "";
+            if (currentMediaInputMode === 'url') {
+                mediaUrl = document.getElementById('post-media-in').value.trim();
+            } else {
+                const fileInput = document.getElementById('post-media-file-in');
+                if (fileInput.files && fileInput.files[0]) {
+                    const file = fileInput.files[0];
+                    mediaUrl = await readFileAsBase64(file);
+                }
+            }
+
+            const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean) : [];
+
+            if (editingPostId) {
+                const updateData = {
+                    title: title,
+                    text: text,
+                    tags: tags,
+                };
+                if (mediaUrl) updateData.mediaUrl = mediaUrl;
+
+                await updateDoc(doc(db, "posts", editingPostId), updateData);
+                alert("ポストを更新しました！");
+            } else {
+                const userSnap = await getDoc(doc(db, "users", currentUser.uid));
+                const userData = userSnap.exists() ? userSnap.data() : {};
+
+                await addDoc(collection(db, "posts"), {
+                    uid: currentUser.uid,
+                    authorName: userData.displayName || currentUser.displayName || "ユーザー",
+                    authorPhoto: userData.photoURL || currentUser.photoURL || "https://i.imgur.com/CcBLZ0O.png",
+                    authorEmail: currentUser.email || "",
+                    customId: userData.customId || currentUser.uid.slice(0, 6),
+                    title: title,
+                    text: text,
+                    mediaUrl: mediaUrl,
+                    tags: tags,
+                    likesCount: 0,
+                    commentsCount: 0,
+                    likedBy: [],
+                    createdAt: serverTimestamp()
+                });
+            }
+
+            document.getElementById('post-title-in').value = "";
+            document.getElementById('post-text-in').value = "";
+            document.getElementById('post-media-in').value = "";
+            document.getElementById('post-media-file-in').value = "";
+            document.getElementById('post-tags-in').value = "";
+            editingPostId = null;
+            goBack();
+        };
+
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        window.deletePost = async (postId) => {
+            if (!confirm("投稿を削除しますか？")) return;
+            await deleteDoc(doc(db, "posts", postId));
+            if (document.getElementById('post-detail-modal').style.display === 'flex') {
+                goBack();
+            }
+        };
+
+        window.runSearch = async () => {
+            const queryText = document.getElementById('search-input-box').value.toLowerCase().trim();
+            const container = document.getElementById('search-results');
+
+            if (!queryText) {
+                container.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:40px;">キーワード、#ハッシュタグ、または @ユーザーID で検索してください。</p>`;
+                return;
+            }
+
+            let html = '';
+
+            if (queryText.startsWith('@')) {
+                const searchId = queryText.replace(/^@/, '');
+                const usersSnap = await getDocs(collection(db, "users"));
+                const matchedUsers = [];
+                usersSnap.forEach(docSnap => {
+                    const uData = docSnap.data();
+                    if ((uData.customId && uData.customId.toLowerCase().includes(searchId)) || (uData.displayName && uData.displayName.toLowerCase().includes(searchId))) {
+                        matchedUsers.push(uData);
+                    }
+                });
+
+                if (matchedUsers.length > 0) {
+                    html += `<div style="padding:12px; font-weight:bold; color:var(--text-muted); font-size:0.85rem;">ユーザー</div>` + 
+                        matchedUsers.map(u => `
+                            <div class="post-item" onclick="navigateToProfile('${u.uid}')" style="align-items:center;">
+                                <img src="${u.photoURL || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small">
+                                <div class="post-user-info">
+                                    <div style="font-weight:700; color:var(--text);">${getStatusHtml(u.status)} ${escapeHtml(u.displayName)} ${getAdminBadge(u.uid, u.email)}</div>
+                                    <div style="font-size:0.8rem; color:var(--text-muted);">@${escapeHtml(u.customId || u.uid.slice(0,6))}</div>
+                                </div>
+                            </div>
+                        `).join('');
+                }
+            }
+
+            const searchKey = queryText.replace(/^#/, '');
+            const filtered = allPosts.filter(p =>
+                (p.title && p.title.toLowerCase().includes(queryText)) ||
+                (p.text && p.text.toLowerCase().includes(queryText)) ||
+                (p.authorName && p.authorName.toLowerCase().includes(queryText)) ||
+                (p.tags && p.tags.some(t => t.toLowerCase().includes(searchKey)))
+            );
+
+            if (filtered.length > 0) {
+                html += `<div style="padding:12px; font-weight:bold; color:var(--text-muted); font-size:0.85rem;">ポスト</div>` + 
+                    filtered.map(post => `
+                        <div class="post-item" onclick="openPostDetailModal('${post.id}')" style="border-bottom:1px solid var(--border);">
+                            <img src="${post.authorPhoto || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small" onclick="event.stopPropagation(); navigateToProfile('${post.uid}')">
+                            <div class="post-user-info">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div class="post-author" onclick="event.stopPropagation(); navigateToProfile('${post.uid}')">${escapeHtml(post.authorName)} ${getAdminBadge(post.uid, post.authorEmail)}</div>
+                                    <div class="post-handle" onclick="event.stopPropagation(); navigateToProfile('${post.uid}')">@${escapeHtml(post.customId || post.uid.slice(0,6))}</div>
+                                </div>
+                                <div class="post-body-text">${escapeHtml(post.text)}</div>
+                                ${post.mediaUrl ? `<div style="font-size:0.75rem; color:var(--accent); margin-top:4px;"><i class="fa-solid fa-paperclip"></i> メディアあり</div>` : ''}
+                                ${post.tags && post.tags.length ? `<div class="post-tags-container">` + post.tags.map(t => `<span class="post-tag-badge" onclick="event.stopPropagation(); searchByTag('${escapeHtml(t)}')">#${escapeHtml(t)}</span>`).join('') + `</div>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+            }
+
+            container.innerHTML = html || `<p style="color:var(--text-muted); text-align:center; padding:40px;">「${escapeHtml(queryText)}」に該当する結果はありません。</p>`;
+        };
+
+        async function renderDmRoomList() {
+            if (!currentUser) return;
+            const container = document.getElementById('dm-room-list');
+            
+            const mySnap = await getDoc(doc(db, "users", currentUser.uid));
+            const myData = mySnap.exists() ? mySnap.data() : {};
+            const followings = myData.following || [];
+
+            if (followings.length === 0) {
+                container.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:40px;">ユーザーをフォローすると、DM（ダイレクトメッセージ）を送信できるようになります！</p>`;
+                return;
+            }
+
+            let html = '';
+            for (const targetUid of followings) {
+                const targetSnap = await getDoc(doc(db, "users", targetUid));
+                if (targetSnap.exists()) {
+                    const tData = targetSnap.data();
+                    html += `
+                        <div class="post-item" onclick="openChatModal('${targetUid}')" style="align-items:center;">
+                            <img src="${tData.photoURL || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small">
+                            <div class="post-user-info">
+                                <div style="font-weight:700; color:var(--text);">${getStatusHtml(tData.status)} ${escapeHtml(tData.displayName)} ${getAdminBadge(targetUid, tData.email)}</div>
+                                <div style="font-size:0.8rem; color:var(--text-muted);">@${escapeHtml(tData.customId || targetUid.slice(0,6))}</div>
+                            </div>
+                            <i class="fa-regular fa-paper-plane" style="color:var(--accent); font-size:1.1rem;"></i>
+                        </div>
+                    `;
+                }
+            }
+            container.innerHTML = html;
+        }
+
+        let chatUnsub = null;
+        window.openChatModal = async (targetUid) => {
+            if (!currentUser) return alert("DMを送信するにはログインが必要です。");
+            activeChatTargetUid = targetUid;
+
+            const targetSnap = await getDoc(doc(db, "users", targetUid));
+            const tData = targetSnap.exists() ? targetSnap.data() : {};
+
+            document.getElementById('chat-target-name').innerHTML = `${getStatusHtml(tData.status)} ${escapeHtml(tData.displayName || 'ユーザー')} ${getAdminBadge(targetUid, tData.email)}`;
+
+            activeChatRoomId = [currentUser.uid, targetUid].sort().join('_');
+
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'chat', targetUid: targetUid });
+
+            const q = query(collection(db, "chats", activeChatRoomId, "messages"), orderBy("createdAt", "asc"));
+            if (chatUnsub) chatUnsub();
+
+            chatUnsub = onSnapshot(q, (snapshot) => {
+                const container = document.getElementById('chat-messages-container');
+                const messages = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                container.innerHTML = messages.map(m => {
+                    const isMine = m.senderUid === currentUser.uid;
+                    return `
+                        <div class="chat-bubble ${isMine ? 'mine' : 'other'}">
+                            ${escapeHtml(m.text)}
+                        </div>
+                    `;
+                }).join('') || `<p style="color:var(--text-muted); text-align:center; padding:20px;">メッセージを送信してチャットを開始しましょう！</p>`;
+
+                container.scrollTop = container.scrollHeight;
+            });
+        };
+
+        window.sendChatMessage = async () => {
+            if (!currentUser || !activeChatRoomId) return;
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            await addDoc(collection(db, "chats", activeChatRoomId, "messages"), {
+                senderUid: currentUser.uid,
+                text: text,
+                createdAt: serverTimestamp()
+            });
+
+            input.value = "";
+        };
+
+        window.switchProfileTab = (tab) => {
+            currentProfileTab = tab;
+            document.querySelectorAll('.profile-tab-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`profile-tab-${tab}`).classList.add('active');
+            if (currentProfileUid) {
+                renderProfilePage(currentProfileUid, false);
+            }
+        };
+
+        async function renderProfilePage(uid, updateUserData = true) {
+            if (!uid) return;
+            let userData = { displayName: 'ユーザー', customId: uid.slice(0,6), photoURL: 'https://i.imgur.com/CcBLZ0O.png', bannerURL: '', bio: '', status: 'online', following: [], followers: [], bookmarks: [], email: '' };
+
+            try {
+                const snap = await getDoc(doc(db, "users", uid));
+                if (snap.exists()) userData = snap.data();
+            } catch (e) { console.error(e); }
+
+            const isSelf = currentUser && currentUser.uid === uid;
+            const isFollowing = userFollowings.includes(uid);
+
+            if (updateUserData) {
+                const bannerEl = document.getElementById('profile-banner-div');
+                if (userData.bannerURL) {
+                    bannerEl.style.backgroundImage = `url('${userData.bannerURL}')`;
+                } else {
+                    bannerEl.style.backgroundImage = 'none';
+                }
+
+                document.getElementById('profile-avatar-img').src = userData.photoURL || 'https://i.imgur.com/CcBLZ0O.png';
+                document.getElementById('profile-display-name').innerHTML = `${getStatusHtml(userData.status)} ${escapeHtml(userData.displayName || 'ユーザー名')} ${getAdminBadge(uid, userData.email)}`;
+                document.getElementById('profile-handle-text').innerText = `@${userData.customId || uid.slice(0, 8)}`;
+                document.getElementById('profile-bio-text').innerText = userData.bio || '自己紹介はありません。';
+                document.getElementById('stat-following-cnt').innerText = (userData.following || []).length;
+                document.getElementById('stat-followers-cnt').innerText = (userData.followers || []).length;
+
+                const btnArea = document.getElementById('profile-action-btn-area');
+                if (isSelf) {
+                    btnArea.innerHTML = `
+                        <select onchange="updateMyStatus(this.value)" style="background:var(--card-bg); color:var(--text); border:1px solid var(--border); padding:6px 12px; border-radius:8px; font-size:0.85rem; margin-right:8px; outline:none;">
+                            <option value="online" ${myCurrentStatus === 'online' ? 'selected' : ''}>オンライン</option>
+                            <option value="away" ${myCurrentStatus === 'away' ? 'selected' : ''}>離席中</option>
+                            <option value="busy" ${myCurrentStatus === 'busy' ? 'selected' : ''}>取り込み中</option>
+                            <option value="offline" ${myCurrentStatus === 'offline' ? 'selected' : ''}>オフライン</option>
+                        </select>
+                        <button class="post-cta-btn" onclick="openEditProfileModal()" style="width:auto; padding:6px 16px; background:transparent; border:1px solid var(--border); color:var(--text);">プロフィール編集</button>
+                    `;
+                } else {
+                    btnArea.innerHTML = `
+                        <button class="post-cta-btn" onclick="openChatModal('${uid}')" style="width:auto; padding:6px 16px; background:transparent; border:1px solid var(--border); color:var(--text); margin-right:8px;"><i class="fa-regular fa-paper-plane"></i> DM</button>
+                        <button class="post-cta-btn" onclick="toggleFollow('${uid}')" style="width:auto; padding:6px 16px; background:${isFollowing ? 'transparent' : 'var(--accent)'}; border:${isFollowing ? '1px solid var(--border)' : 'none'}; color:var(--text);">${isFollowing ? 'フォロー中' : 'フォロー'}</button>
+                        <button class="post-cta-btn" onclick="openReportModal('user', '${uid}')" style="width:auto; padding:6px 12px; background:transparent; border:1px solid #ef4444; color:#ef4444; margin-left:8px;" title="ユーザーを通報"><i class="fa-solid fa-flag"></i></button>
+                    `;
+                }
+            }
+
+            const contentContainer = document.getElementById('profile-dynamic-content');
+            
+            if (currentProfileTab === 'posts') {
+                const userPosts = allPosts.filter(p => p.uid === uid);
+                contentContainer.innerHTML = userPosts.map(post => `
+                    <div class="post-item" onclick="openPostDetailModal('${post.id}')">
+                        <div class="post-user-info">
+                            <div class="post-body-text">${escapeHtml(post.text)}</div>
+                        </div>
+                    </div>
+                `).join('') || `<p style="color:var(--text-muted); text-align:center; padding:40px;">まだ投稿はありません。</p>`;
+            } else if (currentProfileTab === 'likes') {
+                const likedPosts = allPosts.filter(p => p.likedBy && p.likedBy.includes(uid));
+                contentContainer.innerHTML = likedPosts.map(post => `
+                    <div class="post-item" onclick="openPostDetailModal('${post.id}')">
+                        <div class="post-user-info">
+                            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">@${escapeHtml(post.customId || post.uid.slice(0,6))} さんの投稿</div>
+                            <div class="post-body-text">${escapeHtml(post.text)}</div>
+                        </div>
+                    </div>
+                `).join('') || `<p style="color:var(--text-muted); text-align:center; padding:40px;">いいねした投稿はありません。</p>`;
+            } else if (currentProfileTab === 'bookmarks') {
+                const bookmarkedPosts = allPosts.filter(p => userBookmarks.includes(p.id));
+                contentContainer.innerHTML = bookmarkedPosts.map(post => `
+                    <div class="post-item" onclick="openPostDetailModal('${post.id}')">
+                        <div class="post-user-info">
+                            <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">@${escapeHtml(post.customId || post.uid.slice(0,6))} さんの投稿</div>
+                            <div class="post-body-text">${escapeHtml(post.text)}</div>
+                        </div>
+                    </div>
+                `).join('') || `<p style="color:var(--text-muted); text-align:center; padding:40px;">ブックマークした投稿はありません。</p>`;
+            } else if (currentProfileTab === 'media') {
+                const mediaPosts = allPosts.filter(p => p.uid === uid && p.mediaUrl);
+                contentContainer.innerHTML = mediaPosts.map(post => `
+                    <div class="post-item" onclick="openPostDetailModal('${post.id}')">
+                        <div class="post-user-info">
+                            <div class="post-body-text">${escapeHtml(post.text)}</div>
+                            <div style="font-size:0.75rem; color:var(--accent); margin-top:4px;"><i class="fa-solid fa-paperclip"></i> 添付メディア</div>
+                        </div>
+                    </div>
+                `).join('') || `<p style="color:var(--text-muted); text-align:center; padding:40px;">メディア付きの投稿はありません。</p>`;
+            } else if (currentProfileTab === 'following' || currentProfileTab === 'followers') {
+                const targetListIds = currentProfileTab === 'following' ? (userData.following || []) : (userData.followers || []);
+                
+                if (targetListIds.length === 0) {
+                    contentContainer.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:40px;">ユーザーはいません。</p>`;
+                    return;
+                }
+
+                let usersHtml = '';
+                for (const targetId of targetListIds) {
+                    try {
+                        const targetSnap = await getDoc(doc(db, "users", targetId));
+                        if (targetSnap.exists()) {
+                            const tData = targetSnap.data();
+                            const tIsFollowing = currentUser && userFollowings.includes(targetId);
+                            usersHtml += `
+                                <div class="post-item" onclick="navigateToProfile('${targetId}')" style="align-items:center;">
+                                    <img src="${tData.photoURL || 'https://i.imgur.com/CcBLZ0O.png'}" class="user-avatar-small">
+                                    <div class="post-user-info">
+                                        <div style="font-weight:700; color:var(--text);">${getStatusHtml(tData.status)} ${escapeHtml(tData.displayName)} ${getAdminBadge(targetId, tData.email)}</div>
+                                        <div style="font-size:0.8rem; color:var(--text-muted);">@${escapeHtml(tData.customId || targetId.slice(0,6))}</div>
+                                    </div>
+                                    ${currentUser && currentUser.uid !== targetId ? `
+                                        <button class="post-cta-btn" onclick="event.stopPropagation(); toggleFollow('${targetId}')" style="margin:0; width:auto; padding:4px 12px; font-size:0.75rem; background:${tIsFollowing ? 'transparent' : 'var(--accent)'}; border:${tIsFollowing ? '1px solid var(--border)' : 'none'}; color:var(--text);">
+                                            ${tIsFollowing ? 'フォロー中' : 'フォロー'}
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+                contentContainer.innerHTML = usersHtml;
+            }
+        }
+
+        window.openEditProfileModal = async () => {
+            if (!currentUser) return;
+            const snap = await getDoc(doc(db, "users", currentUser.uid));
+            const data = snap.exists() ? snap.data() : {};
+
+            document.getElementById('edit-name-in').value = data.displayName || currentUser.displayName || '';
+            document.getElementById('edit-customid-in').value = data.customId || currentUser.uid.slice(0,6);
+            document.getElementById('edit-avatar-in').value = data.photoURL || currentUser.photoURL || '';
+            document.getElementById('edit-banner-in').value = data.bannerURL || '';
+            document.getElementById('edit-bio-in').value = data.bio || '';
+
+            const currentState = window.history.state || { view: 'home' };
+            pushNavState({ ...currentState, modal: 'edit-profile' });
+        };
+
+        window.submitProfileUpdate = async () => {
+            if (!currentUser) return;
+            const displayName = document.getElementById('edit-name-in').value.trim();
+            const customId = document.getElementById('edit-customid-in').value.trim().replace(/^@/, '');
+            const photoURL = document.getElementById('edit-avatar-in').value.trim();
+            const bannerURL = document.getElementById('edit-banner-in').value.trim();
+            const bio = document.getElementById('edit-bio-in').value.trim();
+
+            if (!displayName) return alert("ユーザー名を入力してください。");
+
+            await updateDoc(doc(db, "users", currentUser.uid), {
+                displayName,
+                customId: customId || currentUser.uid.slice(0,6),
+                photoURL: photoURL || "https://i.imgur.com/CcBLZ0O.png",
+                bannerURL,
+                bio
+            });
+
+            alert("プロフィールを更新しました！");
+            goBack();
+            renderProfilePage(currentUser.uid);
+        };
+
+        window.navigateToHome = () => pushNavState({ view: 'home' });
+        window.navigateToSearch = () => pushNavState({ view: 'search' });
+        window.navigateToNotif = () => pushNavState({ view: 'notif' });
+        window.navigateToDm = () => pushNavState({ view: 'dm' });
+        window.navigateToTerms = () => pushNavState({ view: 'terms' });
+        window.navigateToMyProfile = () => currentUser ? pushNavState({ view: 'profile', uid: currentUser.uid }) : window.location.href = 'login.html';
+        window.navigateToProfile = (uid) => {
+            currentProfileTab = 'posts';
+            pushNavState({ view: 'profile', uid: uid });
+        };
+        window.goBack = () => window.history.back();
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+        }
+    </script>
+</head>
+<body>
+
+<div id="app">
+    <aside class="left-sidebar">
+        <div class="brand-logo" onclick="navigateToHome()">
+            <img src="https://i.ibb.co/TDtWKs5w/samos2.png" alt="Logo">
+            <span>さもっとー</span>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item active" id="nav-home" onclick="navigateToHome()">
+                <i class="fa-solid fa-house"></i>
+                <span>ホーム</span>
+            </li>
+            <li class="nav-item" id="nav-search" onclick="navigateToSearch()">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <span>話題を検索</span>
+            </li>
+            <li class="nav-item" id="nav-notif" onclick="navigateToNotif()">
+                <i class="fa-regular fa-bell"></i>
+                <span>通知</span>
+                <span class="nav-badge-dot" id="notif-badge" style="display:none;">0</span>
+            </li>
+            <li class="nav-item" id="nav-dm" onclick="navigateToDm()">
+                <i class="fa-regular fa-paper-plane"></i>
+                <span>メッセージ</span>
+            </li>
+            <li class="nav-item" id="nav-profile" onclick="navigateToMyProfile()">
+                <i class="fa-regular fa-user"></i>
+                <span>プロフィール</span>
+            </li>
+            <li class="nav-item" onclick="toggleTheme()">
+                <i class="fa-solid fa-moon" id="theme-icon"></i>
+                <span>表示モード</span>
+            </li>
+            <li class="nav-item" onclick="navigateToTerms()">
+                <i class="fa-solid fa-file-contract"></i>
+                <span>利用規約</span>
+            </li>
+            <li class="nav-item" onclick="openRequestModal()">
+                <i class="fa-solid fa-lightbulb"></i>
+                <span>要望を送る</span>
+            </li>
+            <li class="nav-item" id="nav-admin-reports" style="display:none; color:var(--accent);" onclick="window.location.href='reports.html'">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>通報・要望管理</span>
+            </li>
+        </ul>
+
+        <button class="post-cta-btn" onclick="openPostModal()">ポストする</button>
+
+        <div class="user-account-bar" id="auth-user-box"></div>
+    </aside>
+
+    <main class="main-timeline">
+        <div class="sticky-header" style="flex-direction:column; align-items:stretch; padding:0;">
+            <div style="padding:12px 16px; font-size:1.2rem; font-weight:700;">ホーム</div>
+            <div class="home-tabs">
+                <div class="home-tab-item active" id="home-tab-all" onclick="switchHomeTab('all')">おすすめ</div>
+                <div class="home-tab-item" id="home-tab-following" onclick="switchHomeTab('following')">フォロー中</div>
+            </div>
+        </div>
+
+        <div id="timeline-feed"></div>
+
+        <div class="sub-page-overlay" id="search-page">
+            <div class="sticky-header">
+                <i class="fa-solid fa-arrow-left" onclick="goBack()" style="cursor:pointer;"></i>
+                <input type="text" class="form-input" id="search-input-box" placeholder="キーワード, #タグ, @ID で検索..." style="margin:0; flex:1; margin:0 12px;" oninput="runSearch()">
+            </div>
+            <div id="search-results"></div>
+        </div>
+
+        <div class="sub-page-overlay" id="notification-page">
+            <div class="sticky-header">
+                <i class="fa-solid fa-arrow-left" onclick="goBack()" style="cursor:pointer;"></i>
+                <h2>通知</h2>
+                <div></div>
+            </div>
+            <div id="notification-list"></div>
+        </div>
+
+        <div class="sub-page-overlay" id="dm-page">
+            <div class="sticky-header">
+                <i class="fa-solid fa-arrow-left" onclick="goBack()" style="cursor:pointer;"></i>
+                <h2>メッセージ</h2>
+                <div></div>
+            </div>
+            <div id="dm-room-list"></div>
+        </div>
+
+        <div class="sub-page-overlay" id="terms-page">
+            <div class="sticky-header">
+                <i class="fa-solid fa-arrow-left" onclick="goBack()" style="cursor:pointer;"></i>
+                <h2>利用規約 & プライバシーポリシー</h2>
+                <div></div>
+            </div>
+            <div style="padding:20px; line-height:1.6;">
+                <h3 style="color:var(--accent); margin-bottom:8px;">1. 利用規約</h3>
+                <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:20px;">
+                    「さもっとー」は、安全で快適な掲示板型SNSを目指しています。不適切なコンテンツの投稿、スパム、荒らし行為、外部への迷惑行為は固く禁止します。違反が確認された場合、事前通知なくアカウントおよびアクセスIPを永久ブロックします。
+                </p>
+                <h3 style="color:var(--accent); margin-bottom:8px;">2. プライバシーポリシー</h3>
+                <p style="font-size:0.9rem; color:var(--text-muted);">
+                    当サービスではセキュリティログとしてIPアドレス、ブラウザのUser-Agent、アクセス日時、画面サイズなどを自動的に保持します。これらのデータはアクセス制御およびBot対策以外の目的で使用されることはなく、個人情報として第三者に提供されることはありません。
+                </p>
+            </div>
+        </div>
+
+        <div class="sub-page-overlay" id="profile-page">
+            <div class="sticky-header">
+                <i class="fa-solid fa-arrow-left" onclick="goBack()" style="cursor:pointer;"></i>
+                <h2>プロフィール</h2>
+                <div></div>
+            </div>
+            <div class="profile-banner" id="profile-banner-div"></div>
+            <div class="profile-header-details">
+                <img src="https://i.ibb.co/TDtWKs5w/samos2.png" class="profile-avatar-large" id="profile-avatar-img">
+                <div style="display:flex; justify-content:flex-end;" id="profile-action-btn-area"></div>
+                <div style="font-size:1.2rem; font-weight:700; margin-top:8px;" id="profile-display-name">ユーザー名</div>
+                <div style="font-size:0.85rem; color:var(--text-muted);" id="profile-handle-text">@user</div>
+                <div style="font-size:0.9rem; margin-top:8px;" id="profile-bio-text">自己紹介文</div>
+                <div style="display:flex; gap:16px; font-size:0.85rem; color:var(--text-muted); margin-top:12px;">
+                    <div style="cursor:pointer;" onclick="switchProfileTab('following')"><strong style="color:var(--text);" id="stat-following-cnt">0</strong> フォロー中</div>
+                    <div style="cursor:pointer;" onclick="switchProfileTab('followers')"><strong style="color:var(--text);" id="stat-followers-cnt">0</strong> フォロワー</div>
+                </div>
+            </div>
+            <div class="profile-tabs">
+                <div class="profile-tab-item active" id="profile-tab-posts" onclick="switchProfileTab('posts')">ポスト</div>
+                <div class="profile-tab-item" id="profile-tab-likes" onclick="switchProfileTab('likes')">いいね</div>
+                <div class="profile-tab-item" id="profile-tab-bookmarks" onclick="switchProfileTab('bookmarks')">保存</div>
+                <div class="profile-tab-item" id="profile-tab-media" onclick="switchProfileTab('media')">メディア</div>
+                <div class="profile-tab-item" id="profile-tab-following" onclick="switchProfileTab('following')">フォロー中</div>
+                <div class="profile-tab-item" id="profile-tab-followers" onclick="switchProfileTab('followers')">フォロワー</div>
+            </div>
+            <div id="profile-dynamic-content"></div>
+        </div>
+    </main>
+
+    <aside class="right-sidebar">
+        <div class="widget-box">
+            <h3 style="font-size:1rem; margin-bottom:8px;"><i class="fa-solid fa-arrow-trend-up"></i> トレンド</h3>
+            <div id="trend-widget-list"></div>
+        </div>
+
+        <div class="widget-box">
+            <h3 style="font-size:1rem; margin-bottom:8px;">「さもっとー」へようこそ</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted); line-height:1.4;">
+                「さもっとー」は、掲示板のようなハイブリッドSNSです。
+            </p>
+        </div>
+        
+        <div class="widget-box">
+            <h3 style="font-size:0.95rem; margin-bottom:6px; color:var(--accent);"><i class="fa-solid fa-heart"></i> 開発者を応援する</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.4; margin-bottom:10px;">
+                サイト運営や開発を応援していただける方は、GoogleフォームにてAmazonギフト券での寄付を受け付けています。ご支援いただけると大変励みになります。
+            </p>
+            <a href="https://forms.gle/1Po4kUem1mMQPPRn9" target="_blank" rel="noopener" style="display:block; text-align:center; background:var(--card-bg); border:1px solid var(--accent); color:var(--accent); padding:8px; border-radius:8px; font-weight:bold; text-decoration:none; font-size:0.85rem;">
+                Amazonギフト券で寄付する
+            </a>
+        </div>
+    </aside>
+
+    <nav class="mobile-bottom-nav">
+        <div class="mobile-nav-item active" id="mob-nav-home" onclick="navigateToHome()"><i class="fa-solid fa-house"></i></div>
+        <div class="mobile-nav-item" id="mob-nav-search" onclick="navigateToSearch()"><i class="fa-solid fa-magnifying-glass"></i></div>
+        <div class="mobile-nav-item" onclick="openPostModal()"><i class="fa-solid fa-square-plus" style="color:var(--accent);"></i></div>
+        <div class="mobile-nav-item" id="mob-nav-dm" onclick="navigateToDm()"><i class="fa-regular fa-paper-plane"></i></div>
+        <div class="mobile-nav-item" id="mob-nav-profile" onclick="navigateToMyProfile()"><i class="fa-regular fa-user"></i></div>
+    </nav>
+</div>
+
+<div class="modal-overlay" id="report-modal">
+    <div class="modal-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3>通報フォーム</h3>
+            <i class="fa-solid fa-xmark" onclick="goBack()" style="cursor:pointer; font-size:1.2rem;"></i>
+        </div>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">対象: <span id="report-target-label" style="color:var(--text); font-weight:bold;"></span></p>
+        
+        <label style="font-size:0.8rem; color:var(--text-muted);">理由</label>
+        <select id="report-reason-in" class="form-input">
+            <option value="スパム・荒らし">スパム・荒らし</option>
+            <option value="誹謗中傷・ハラスメント">誹謗中傷・ハラスメント</option>
+            <option value="不適切なコンテンツ（NSFW等）">不適切なコンテンツ（NSFW等）</option>
+            <option value="その他規約違反">その他規約違反</option>
+        </select>
+
+        <label style="font-size:0.8rem; color:var(--text-muted);">詳細な説明（任意）</label>
+        <textarea id="report-detail-in" class="form-input" style="height:80px; resize:none;" placeholder="詳細をご記入ください..."></textarea>
+
+        <button class="post-cta-btn" onclick="submitReport()" style="background:#ef4444;">通報を送信</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="request-modal">
+    <div class="modal-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3>管理者への要望・フィードバック</h3>
+            <i class="fa-solid fa-xmark" onclick="goBack()" style="cursor:pointer; font-size:1.2rem;"></i>
+        </div>
+        
+        <label style="font-size:0.8rem; color:var(--text-muted);">カテゴリー</label>
+        <select id="request-category-in" class="form-input">
+            <option value="機能追加リクエスト">機能追加リクエスト</option>
+            <option value="バグ報告">バグ報告</option>
+            <option value="デザイン・UIについて">デザイン・UIについて</option>
+            <option value="その他">その他</option>
+        </select>
+
+        <label style="font-size:0.8rem; color:var(--text-muted);">要望・内容</label>
+        <textarea id="request-detail-in" class="form-input" style="height:100px; resize:none;" placeholder="「こんな機能がほしい」「ここを直してほしい」など自由に書いてね！"></textarea>
+
+        <button class="post-cta-btn" onclick="submitRequest()">要望を送信する</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="post-detail-modal">
+    <div class="modal-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3>ポスト詳細</h3>
+            <i class="fa-solid fa-xmark" onclick="goBack()" style="cursor:pointer; font-size:1.2rem;"></i>
+        </div>
+        <div id="post-detail-container"></div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="post-modal">
+    <div class="modal-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3 id="post-modal-title">新規ポスト</h3>
+            <i class="fa-solid fa-xmark" onclick="goBack()" style="cursor:pointer; font-size:1.2rem;"></i>
+        </div>
+        <input type="text" id="post-title-in" class="form-input" placeholder="タイトル（任意）">
+        <textarea id="post-text-in" class="form-input" style="height:100px; resize:none;" placeholder="いまどうしてる？"></textarea>
+        
+        <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:4px;">画像/動画の添付方法</label>
+        <div class="media-option-tabs">
+            <div class="media-tab-btn active" id="tab-btn-url" onclick="switchMediaMode('url')">URLで指定</div>
+            <div class="media-tab-btn" id="tab-btn-upload" onclick="switchMediaMode('upload')">ファイルを選択</div>
+        </div>
+
+        <div id="post-media-url-area">
+            <input type="text" id="post-media-in" class="form-input" placeholder="動画 / 画像のURL (https://...)">
+        </div>
+        <div id="post-media-file-area" style="display:none;">
+            <input type="file" id="post-media-file-in" class="form-input" accept="image/*,video/*">
+        </div>
+
+        <input type="text" id="post-tags-in" class="form-input" placeholder="タグ (例: 雑談, ニュース ※カンマ区切り)">
+        <div style="display:none;"><input type="text" id="post-hp-field" value=""></div>
+        <button class="post-cta-btn" onclick="submitNewPost()">送信する</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="edit-profile-modal">
+    <div class="modal-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h3>プロフィールを編集</h3>
+            <i class="fa-solid fa-xmark" onclick="goBack()" style="cursor:pointer; font-size:1.2rem;"></i>
+        </div>
+        <label style="font-size:0.8rem; color:var(--text-muted);">ユーザー名</label>
+        <input type="text" id="edit-name-in" class="form-input" placeholder="表示名">
+        <label style="font-size:0.8rem; color:var(--text-muted);">ユーザーID</label>
+        <input type="text" id="edit-customid-in" class="form-input" placeholder="例: samon_id">
+        <label style="font-size:0.8rem; color:var(--text-muted);">アイコン画像 URL</label>
+        <input type="text" id="edit-avatar-in" class="form-input" placeholder="https://...">
+        <label style="font-size:0.8rem; color:var(--text-muted);">バナー画像 URL</label>
+        <input type="text" id="edit-banner-in" class="form-input" placeholder="https://...">
+        <label style="font-size:0.8rem; color:var(--text-muted);">自己紹介</label>
+        <textarea id="edit-bio-in" class="form-input" style="height:80px; resize:none;" placeholder="自己紹介文"></textarea>
+        <button class="post-cta-btn" onclick="submitProfileUpdate()">保存する</button>
+    </div>
+</div>
+
+<div class="modal-overlay" id="comments-modal">
+    <div class="modal-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3>コメント</h3>
+            <i class="fa-solid fa-xmark" onclick="goBack()" style="cursor:pointer; font-size:1.2rem;"></i>
+        </div>
+        <div id="comments-container" style="max-height:260px; overflow-y:auto; margin-bottom:12px;"></div>
+        <div style="display:flex; gap:8px;">
+            <input type="text" class="form-input" id="comment-input" placeholder="返信を投稿..." style="margin:0;">
+            <button class="post-cta-btn" onclick="submitComment()" style="margin:0; width:auto; padding:8px 16px;">送信</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="chat-modal">
+    <div class="modal-box" style="display:flex; flex-direction:column; height:80vh;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px;">
+            <h3 id="chat-target-name">チャット</h3>
+            <i class="fa-solid fa-xmark" onclick="goBack()" style="cursor:pointer; font-size:1.2rem;"></i>
+        </div>
+        <div id="chat-messages-container" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; padding:8px 0;"></div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+            <input type="text" class="form-input" id="chat-input" placeholder="メッセージを入力..." style="margin:0;">
+            <button class="post-cta-btn" onclick="sendChatMessage()" style="margin:0; width:auto; padding:8px 16px;">送信</button>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
