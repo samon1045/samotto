@@ -1,5 +1,4 @@
 import admin from 'firebase-admin';
-import fetch from 'node-fetch';
 
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -75,6 +74,7 @@ async function main() {
 
   console.log(`Botスクリプト実行開始 (UTC時間: ${utcHour}時)`);
 
+  // --- 1. 朝のデイリーアナウンス (UTC 23時 = 日本時間 朝8時) ---
   if (utcHour === 23) {
     let weatherText = "☀️ 本日も良い天気になりそうです！";
     try {
@@ -82,7 +82,9 @@ async function main() {
       const data = await res.json();
       const forecast = data.forecasts[0];
       weatherText = `🌤 【今日の天気 (${data.location.city})】${forecast.telop} (最高: ${forecast.temperature.max?.celsius || '--'}℃)`;
-    } catch (e) {}
+    } catch (e) {
+      console.warn("天気予報の取得に失敗しました", e);
+    }
 
     const fortunes = ["♈牡羊座: 🌟大吉！新しい一歩を踏み出そう", "♉牡牛座: ✨ラッキーカラーはブルー", "♊双子座: 🎵素敵な出会いがあるかも", "♋蟹座: 🍀リラックスして過ごそう", "♌獅子座: 🔥やる気満々で成果が出る日", "♍乙女座: ☕温かい飲み物で一息つこう", "♎天秤座: 🤝チームワークが鍵になる日", "♏蠍子座: 💡ひらめきが冴えわたる日", "♐射手座: 🌈楽しい予定を立てよう", "♑山羊座: 📚コツコツ努力が実を結ぶ日", "♒水瓶座: 🚀新しいガジェットに触れてみよう", "♓魚座: 🎨直感を信じて行動しよう"];
     const todayFortune = fortunes[Math.floor(Math.random() * fortunes.length)];
@@ -93,6 +95,7 @@ async function main() {
     await createBotPost("☀️ 朝のデイリーアナウンス", text, ["Bot", "朝の挨拶", "ニュース"]);
   }
 
+  // --- 2. ナイトリポート (UTC 14時 = 日本時間 夜23時) ---
   if (utcHour === 14) {
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
     try {
@@ -102,7 +105,7 @@ async function main() {
         const data = doc.data();
         if (data.uid !== BOT_USER.uid) {
           const score = (data.likesCount || 0) * 2 + (data.commentsCount || 0) * 3;
-          posts.push({ title: data.title || data.text.slice(0, 20), author: data.authorName, score });
+          posts.push({ title: data.title || (data.text ? data.text.slice(0, 20) : ""), author: data.authorName, score });
         }
       });
 
@@ -125,7 +128,7 @@ async function main() {
     }
   }
 
-  // --- 3. 地震速報チェック (10分おきに実行) ---
+  // --- 3. 地震速報チェック (10分おき) ---
   try {
     const res = await fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1");
     const data = await res.json();
@@ -148,7 +151,7 @@ async function main() {
         let shouldPost = true;
         if (!recentCheck.empty) {
           const lastPost = recentCheck.docs[0].data();
-          if (lastPost.text.includes(location)) {
+          if (lastPost.text && lastPost.text.includes(location)) {
             shouldPost = false; 
           }
         }
@@ -158,7 +161,9 @@ async function main() {
         }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn("地震情報の取得に失敗しました", e);
+  }
 }
 
 main().then(() => process.exit(0));
