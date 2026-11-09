@@ -10,22 +10,53 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 
+    <!-- Firebase & Supabase SDKのインポート -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-        const firebaseConfig = {
-            apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
-            authDomain: "my-ball-wiki.firebaseapp.com",
-            projectId: "my-ball-wiki",
-            storageBucket: "my-ball-wiki.firebasestorage.app",
-            messagingSenderId: "1004863748430",
-            appId: "1:1004863748430:web:584e16403e2eb87c90861f"
-        };
+        import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, getDoc, setDoc, updateDoc, deleteDoc, increment, where, arrayUnion, arrayRemove, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // ==========================================
+        // マルチデータベース（ルーティング用）設定
+        // メインDB（目次DB兼DB-A）および拡張用DBの構成
+        // ==========================================
+        const dbConfigs = [
+            {
+                name: "db_primary", // メイン（目次DBおよびDB-A兼用）
+                config: {
+                    apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
+                    authDomain: "my-ball-wiki.firebaseapp.com",
+                    projectId: "my-ball-wiki",
+                    storageBucket: "my-ball-wiki.firebasestorage.app",
+                    messagingSenderId: "1004863748430",
+                    appId: "1:1004863748430:web:584e16403e2eb87c90861f"
+                }
+            }
+        ];
+
+        const firebaseApps = {};
+        const firestores = {};
+
+        dbConfigs.forEach(item => {
+            const appInstance = initializeApp(item.config, item.name);
+            firebaseApps[item.name] = appInstance;
+            firestores[item.name] = getFirestore(appInstance);
+        });
+
+        const db = firestores["db_primary"];
+        const auth = getAuth(firebaseApps["db_primary"]);
+
+        // Supabase クライアント初期化 (DB-B拡張用)
+        const supabaseUrl = "https://your-supabase-project.supabase.co"; // 設定に合わせて変更可能
+        const supabaseKey = "sb_publishable_YFxWmcAkZt6WqIoWk5J57w_O6On2ShO";
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Neon / Cloudflare D1 接続情報保持
+        window.dbConfigInfo = {
+            neonConnection: "postgresql://neondb_owner:npg_vLwEsD1a8ypq@ep-jolly-meadow-bdi8a48h-pooler.c-8.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+            cloudflareD1Id: "f33c9cb6-00c6-4cbd-aa00-0dc77cb1468c"
+        };
 
         const ADMIN_UIDS = ['samon53577'];
         const ADMIN_EMAILS = ['kuwakuwa53577.2@gmail.com'];
@@ -72,11 +103,9 @@
                 if (ipData && !isAdmin) {
                     const country = ipData.country_code;
                     const isProxy = ipData.proxy || false;
-                    const asn = ipData.asn || "";
                     const org = (ipData.org || "").toLowerCase();
                     const networkType = ipData.network_type || "";
 
-                    // より厳格なVPN/ホスティング検知ロジック
                     const vpnKeywords = ['vpn', 'proxy', 'hosting', 'datacenter', 'cloudflare', 'digitalocean', 'ovh', 'amazon', 'aws', 'gcp', 'm247', 'leaseweb', 'hetzner', 'choopa', 'psychz', 'packet'];
                     const isHostingOrVpnOrg = vpnKeywords.some(keyword => org.includes(keyword));
 
@@ -112,77 +141,22 @@
                         return;
                     }
                 }
-
-                const currentIp = ipData ? ipData.ip : "";
-                const blockedSnap = await getDocs(collection(db, "blocked_rules"));
-                let isBlocked = false;
-                blockedSnap.forEach(docSnap => {
-                    const data = docSnap.data();
-                    if ((currentIp && data.value === currentIp) || (userEmail && data.value === userEmail)) {
-                        isBlocked = true;
-                    }
-                });
-
-                if (isBlocked) {
-                    await signOut(auth);
-                    localStorage.removeItem('is_logged_in');
-                    document.body.innerHTML = '<div style="text-align:center;padding-top:150px;color:#ef4444;font-family:sans-serif;background:#000;height:100vh;"><h2>アクセス禁止</h2><p>このアカウントまたはIPアドレスはブロックされています。</p></div>';
-                }
             } catch (e) {
                 console.error("セキュリティ検証エラー:", e);
             }
         });
 
-        
-        window.navigateToHome = navigateToHome;
-        window.navigateToSearch = navigateToSearch;
-        window.navigateToNotif = navigateToNotif;
-        window.navigateToDm = navigateToDm;
-        window.navigateToMyProfile = navigateToMyProfile;
-        window.navigateToTerms = navigateToTerms;
-        window.openRequestModal = openRequestModal;
-        window.openPostModal = openPostModal;
-        window.updateMyStatus = updateMyStatus;
-        window.addMutedWord = addMutedWord;
-        window.openAdminBroadcastModal = openAdminBroadcastModal;
-        window.submitAdminBroadcast = submitAdminBroadcast;
-        window.submitReport = submitReport;
-        window.submitRequest = submitRequest;
-        window.markNotifRead = markNotifRead;
-        window.switchHomeTab = switchHomeTab;
-        window.searchByTag = searchByTag;
-        window.castVote = castVote;
-        window.toggleBookmark = toggleBookmark;
-        window.openPostDetailModal = openPostDetailModal;
-        window.toggleLike = toggleLike;
-        window.toggleFollow = toggleFollow;
-        window.openCommentsModal = openCommentsModal;
-        window.setReplyTarget = setReplyTarget;
-        window.submitComment = submitComment;
-        window.switchMediaMode = switchMediaMode;
-        window.submitNewPost = submitNewPost;
-        window.deletePost = deletePost;
-        window.runSearch = runSearch;
-        window.switchProfileTab = switchProfileTab;
-        window.navigateToProfile = navigateToProfile;
-        window.openEditProfileModal = openEditProfileModal;
-        window.submitProfileUpdate = submitProfileUpdate;
-        window.goBack = goBack;
-        window.openLightbox = openLightbox;
-        window.closeLightbox = closeLightbox;
-        window.openRepostModal = openRepostModal;
-        window.openChatModal = openChatModal;
-        window.submitChatMessage = submitChatMessage;
-        window.toggleBlockUser = toggleBlockUser;
-        window.adminBanUser = adminBanUser;
-        window.openReportModal = openReportModal;
-        window.logout = logout;
-        window.toggleTheme = toggleTheme;
-
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
         }
+
+        window.db = db;
+        window.auth = auth;
+        window.firestores = firestores;
+        window.firebaseApps = firebaseApps;
+        window.supabase = supabase;
+        window.escapeHtml = escapeHtml;
     </script>
 
     <style>
@@ -325,13 +299,11 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
 .status-busy { background-color: #ef4444; }
 .status-offline { background-color: #9ca3af; }
 
-/* Lightbox Modal */
 #lightbox-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 200; display: none; align-items: center; justify-content: center; }
 #lightbox-modal img { max-width: 90%; max-height: 90vh; object-fit: contain; border-radius: 8px; }
     </style>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { 
             getFirestore, doc, setDoc, deleteDoc, collection, getDoc, getDocs, 
             query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, increment, where, arrayUnion, arrayRemove 
@@ -340,18 +312,11 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             getAuth, onAuthStateChanged, signOut 
         } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAWJ8gxMBqlCH-HGccXb-PpwM7xWVghUNg",
-            authDomain: "my-ball-wiki.firebaseapp.com",
-            projectId: "my-ball-wiki",
-            storageBucket: "my-ball-wiki.firebasestorage.app",
-            messagingSenderId: "1004863748430",
-            appId: "1:1004863748430:web:584e16403e2eb87c90861f"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
+        const db = window.db;
+        const auth = window.auth;
+        const firestores = window.firestores;
+        const firebaseApps = window.firebaseApps;
+        const escapeHtml = window.escapeHtml;
 
         const ADMIN_UIDS = ['samon53577'];
         const ADMIN_EMAILS = ['kuwakuwa53577.2@gmail.com'];
@@ -614,7 +579,6 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             }
         };
 
-        // ブロック・ミュート管理
         window.toggleBlockUser = async (targetUid) => {
             if (!currentUser) return alert("ログインが必要です。");
             const myRef = doc(db, "users", currentUser.uid);
@@ -852,13 +816,46 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             await updateDoc(doc(db, "notifications", id), { read: true });
         };
 
+        // ==========================================
+        // メタデータ（ルーティング）対応の投稿リスナー
+        // ==========================================
         let postsUnsub = null;
         function listenPosts() {
             if (postsUnsub) postsUnsub();
-            const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+            const routingQuery = query(collection(db, "post_routing"), orderBy("createdAt", "desc"));
 
-            postsUnsub = onSnapshot(q, (snapshot) => {
-                allPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            postsUnsub = onSnapshot(routingQuery, async (routingSnapshot) => {
+                const routingDocs = routingSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                
+                const dbGroups = {};
+                routingDocs.forEach(route => {
+                    const dbName = route.dbName || "db_primary";
+                    if (!dbGroups[dbName]) dbGroups[dbName] = [];
+                    dbGroups[dbName].push(route.postId);
+                });
+
+                let loadedPosts = [];
+                for (const [dbName, postIds] of Object.entries(dbGroups)) {
+                    const targetDb = firestores[dbName] || db;
+                    for (const postId of postIds) {
+                        try {
+                            const postSnap = await getDoc(doc(targetDb, "posts", postId));
+                            if (postSnap.exists()) {
+                                loadedPosts.push({ id: postSnap.id, dbName: dbName, ...postSnap.data() });
+                            }
+                        } catch (e) {
+                            console.error(`ポスト取得エラー (${dbName}/${postId}):`, e);
+                        }
+                    }
+                }
+
+                loadedPosts.sort((a, b) => {
+                    const tA = a.createdAt ? a.createdAt.seconds : 0;
+                    const tB = b.createdAt ? b.createdAt.seconds : 0;
+                    return tB - tA;
+                });
+
+                allPosts = loadedPosts;
                 renderPosts();
                 renderTrends();
                 if (document.getElementById('search-page').style.display === 'flex') {
@@ -885,6 +882,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                 .slice(0, 5);
 
             const container = document.getElementById('trend-widget-list');
+            if (!container) return;
             if (sortedTrends.length === 0) {
                 container.innerHTML = `<p style="font-size:0.8rem; color:var(--text-muted);">トレンドタグはありません。</p>`;
                 return;
@@ -989,7 +987,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                         const pct = totalVotes > 0 ? Math.round((votesCount / totalVotes) * 100) : 0;
                         const hasVoted = currentUser && opt.votes && opt.votes.includes(currentUser.uid);
                         pollHtml += `
-                            <div onclick="castVote('${post.id}', ${idx})" style="padding:8px; border:1px solid ${hasVoted ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; margin-bottom:6px; cursor:pointer; position:relative; overflow:hidden;">
+                            <div onclick="castVote('${post.id}', '${post.dbName || 'db_primary'}', ${idx})" style="padding:8px; border:1px solid ${hasVoted ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; margin-bottom:6px; cursor:pointer; position:relative; overflow:hidden;">
                                 <div style="position:absolute; top:0; left:0; bottom:0; width:${pct}%; background:rgba(29, 155, 240, 0.2); pointer-events:none;"></div>
                                 <div style="display:flex; justify-content:space-between; position:relative; font-size:0.85rem; font-weight:bold;">
                                     <span>${escapeHtml(opt.text)} ${hasVoted ? '✓' : ''}</span>
@@ -1041,9 +1039,10 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             document.getElementById('lightbox-modal').style.display = 'none';
         };
 
-        window.castVote = async (postId, optionIdx) => {
+        window.castVote = async (postId, dbName, optionIdx) => {
             if (!currentUser) return alert("投票するにはログインが必要です。");
-            const postRef = doc(db, "posts", postId);
+            const targetDb = firestores[dbName] || db;
+            const postRef = doc(targetDb, "posts", postId);
             const postSnap = await getDoc(postRef);
             if (!postSnap.exists()) return;
 
@@ -1068,7 +1067,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
 
             return `
                 <div class="media-tiktok-actions" onclick="event.stopPropagation()">
-                    <div class="action-bubble" onclick="toggleLike('${post.id}', '${post.uid}')">
+                    <div class="action-bubble" onclick="toggleLike('${post.id}', '${post.dbName || 'db_primary'}', '${post.uid}')">
                         <div class="action-icon-circle ${isLiked ? 'liked' : ''}">
                             <i class="fa-solid fa-heart"></i>
                         </div>
@@ -1110,7 +1109,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                             </div>
                             <span class="action-count-text" style="color:var(--accent);">編集</span>
                         </div>
-                        <div class="action-bubble" onclick="deletePost('${post.id}')">
+                        <div class="action-bubble" onclick="deletePost('${post.id}', '${post.dbName || 'db_primary'}')">
                             <div class="action-icon-circle" style="color:#ef4444;">
                                 <i class="fa-solid fa-trash"></i>
                             </div>
@@ -1138,7 +1137,10 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             const userSnap = await getDoc(doc(db, "users", currentUser.uid));
             const userData = userSnap.exists() ? userSnap.data() : {};
 
-            await addDoc(collection(db, "posts"), {
+            const targetDbName = "db_primary";
+            const targetDb = firestores[targetDbName];
+
+            const newPostRef = await addDoc(collection(targetDb, "posts"), {
                 uid: currentUser.uid,
                 authorName: userData.displayName || currentUser.displayName || "ユーザー",
                 authorPhoto: userData.photoURL || currentUser.photoURL || "https://i.imgur.com/CcBLZ0O.png",
@@ -1154,7 +1156,15 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                 likedBy: [],
                 createdAt: serverTimestamp()
             });
-            await updateDoc(doc(db, "posts", post.id), { repostsCount: increment(1) });
+
+            await addDoc(collection(db, "post_routing"), {
+                postId: newPostRef.id,
+                dbName: targetDbName,
+                createdAt: serverTimestamp()
+            });
+
+            const originalTargetDb = firestores[post.dbName || "db_primary"] || db;
+            await updateDoc(doc(originalTargetDb, "posts", post.id), { repostsCount: increment(1) });
             alert("リポストしました！");
         }
 
@@ -1242,7 +1252,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                     const pct = totalVotes > 0 ? Math.round((votesCount / totalVotes) * 100) : 0;
                     const hasVoted = currentUser && opt.votes && opt.votes.includes(currentUser.uid);
                     pollHtml += `
-                        <div onclick="castVote('${post.id}', ${idx})" style="padding:10px; border:1px solid ${hasVoted ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; margin-bottom:6px; cursor:pointer; position:relative; overflow:hidden;">
+                        <div onclick="castVote('${post.id}', '${post.dbName || 'db_primary'}', ${idx})" style="padding:10px; border:1px solid ${hasVoted ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; margin-bottom:6px; cursor:pointer; position:relative; overflow:hidden;">
                             <div style="position:absolute; top:0; left:0; bottom:0; width:${pct}%; background:rgba(29, 155, 240, 0.2); pointer-events:none;"></div>
                             <div style="display:flex; justify-content:space-between; position:relative; font-size:0.9rem; font-weight:bold;">
                                 <span>${escapeHtml(opt.text)} ${hasVoted ? '✓' : ''}</span>
@@ -1280,7 +1290,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                 <div style="font-size:0.8rem; color:var(--text-muted); margin-top:12px;">投稿日時: ${timeStr}</div>
 
                 <div style="display:flex; gap:20px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); padding:12px 0; margin-top:16px; justify-content:space-around;">
-                    <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:${isLiked ? 'var(--like-red)' : 'var(--text)'};" onclick="toggleLike('${post.id}', '${post.uid}')">
+                    <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:${isLiked ? 'var(--like-red)' : 'var(--text)'};" onclick="toggleLike('${post.id}', '${post.dbName || 'db_primary'}', '${post.uid}')">
                         <i class="fa-solid fa-heart"></i> <span>${post.likesCount || 0} いいね</span>
                     </div>
                     <div style="cursor:pointer; display:flex; align-items:center; gap:6px;" onclick="openCommentsModal('${post.id}')">
@@ -1296,7 +1306,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                         <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:var(--accent);" onclick="openEditPostModal('${post.id}')">
                             <i class="fa-solid fa-pen-to-square"></i> <span>編集</span>
                         </div>
-                        <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:#ef4444;" onclick="deletePost('${post.id}')">
+                        <div style="cursor:pointer; display:flex; align-items:center; gap:6px; color:#ef4444;" onclick="deletePost('${post.id}', '${post.dbName || 'db_primary'}')">
                             <i class="fa-solid fa-trash"></i> <span>削除</span>
                         </div>
                     ` : ''}
@@ -1304,10 +1314,11 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             `;
         }
 
-        window.toggleLike = async (postId, targetUid, forceLike = false) => {
+        window.toggleLike = async (postId, dbName, targetUid, forceLike = false) => {
             if (!currentUser) return alert("いいねするにはログインが必要です。");
 
-            const postRef = doc(db, "posts", postId);
+            const targetDb = firestores[dbName] || db;
+            const postRef = doc(targetDb, "posts", postId);
             const postSnap = await getDoc(postRef);
             if (!postSnap.exists()) return;
 
@@ -1360,7 +1371,6 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             }
         };
 
-        // DM (ダイレクトメッセージ) 機能
         window.navigateToDm = () => {
             if (!currentUser) return window.location.href = 'login.html';
             pushNavState({ view: 'dm' });
@@ -1407,7 +1417,6 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
                 pushNavState({ ...currentState, modal: 'chat', chatUid: targetUid });
             }
 
-            // チャットルームIDは両者のUIDをソートして結合
             const chatId = [currentUser.uid, targetUid].sort().join('_');
             const messagesRef = collection(db, "chats", chatId, "messages");
             const q = query(messagesRef, orderBy("createdAt", "asc"));
@@ -1454,7 +1463,10 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             const currentState = window.history.state || { view: 'home' };
             pushNavState({ ...currentState, modal: 'comments' });
 
-            const q = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
+            const postObj = allPosts.find(p => p.id === postId);
+            const targetDb = firestores[postObj?.dbName || 'db_primary'] || db;
+
+            const q = query(collection(targetDb, "posts", postId, "comments"), orderBy("createdAt", "asc"));
             if (commentsUnsub) commentsUnsub();
 
             commentsUnsub = onSnapshot(q, (snapshot) => {
@@ -1490,10 +1502,12 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             const text = input.value.trim();
             if (!text || !activeCommentsPostId) return;
 
-            const postRef = doc(db, "posts", activeCommentsPostId);
+            const postObj = allPosts.find(p => p.id === activeCommentsPostId);
+            const targetDb = firestores[postObj?.dbName || 'db_primary'] || db;
+            const postRef = doc(targetDb, "posts", activeCommentsPostId);
             const postSnap = await getDoc(postRef);
 
-            await addDoc(collection(db, "posts", activeCommentsPostId, "comments"), {
+            await addDoc(collection(targetDb, "posts", activeCommentsPostId, "comments"), {
                 uid: currentUser.uid,
                 authorName: currentUser.displayName,
                 authorPhoto: currentUser.photoURL,
@@ -1653,12 +1667,18 @@ AIにより不適切または著作権上の問題があるコンテンツと判
 
             const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean) : [];
 
+            // 書き込み先DBの選定（デフォルトはメインDB「db_primary」。容量がいっぱいになったら別のDB名に切り替え可能）
+            const targetDbName = "db_primary"; 
+            const targetDb = firestores[targetDbName];
+
             if (editingPostId) {
+                const postObj = allPosts.find(p => p.id === editingPostId);
+                const editDb = firestores[postObj?.dbName || 'db_primary'] || db;
                 const updateData = { title, text, tags };
                 if (mediaUrl) updateData.mediaUrl = mediaUrl;
                 if (pollData) updateData.poll = pollData;
 
-                await updateDoc(doc(db, "posts", editingPostId), updateData);
+                await updateDoc(doc(editDb, "posts", editingPostId), updateData);
                 alert("ポストを更新しました！");
             } else {
                 const userSnap = await getDoc(doc(db, "users", currentUser.uid));
@@ -1686,7 +1706,15 @@ AIにより不適切または著作権上の問題があるコンテンツと判
                     newPostData.quotedPost = window.activeQuotedPostData;
                 }
 
-                await addDoc(collection(db, "posts"), newPostData);
+                // 1. データ本体を対象のデータベースに保存
+                const newPostRef = await addDoc(collection(targetDb, "posts"), newPostData);
+
+                // 2. メタデータDB（目次DB）に「どのIDがどのDBにあるか」のルーティング情報を記録
+                await addDoc(collection(db, "post_routing"), {
+                    postId: newPostRef.id,
+                    dbName: targetDbName,
+                    createdAt: serverTimestamp()
+                });
             }
 
             document.getElementById('post-title-in').value = "";
@@ -1712,9 +1740,19 @@ AIにより不適切または著作権上の問題があるコンテンツと判
             });
         }
 
-        window.deletePost = async (postId) => {
+        window.deletePost = async (postId, dbName) => {
             if (!confirm("投稿を削除しますか？")) return;
-            await deleteDoc(doc(db, "posts", postId));
+            const targetDb = firestores[dbName] || db;
+            await deleteDoc(doc(targetDb, "posts", postId));
+
+            // メタデータ側のルーティング情報も削除
+            const routingSnap = await getDocs(collection(db, "post_routing"));
+            routingSnap.forEach(async (routeDoc) => {
+                if (routeDoc.data().postId === postId) {
+                    await deleteDoc(doc(db, "post_routing", routeDoc.id));
+                }
+            });
+
             if (document.getElementById('post-detail-modal').style.display === 'flex') {
                 goBack();
             }
@@ -1982,57 +2020,6 @@ AIにより不適切または著作権上の問題があるコンテンツと判
             pushNavState({ view: 'profile', uid: uid });
         };
         window.goBack = () => window.history.back();
-
-        
-        window.navigateToHome = navigateToHome;
-        window.navigateToSearch = navigateToSearch;
-        window.navigateToNotif = navigateToNotif;
-        window.navigateToDm = navigateToDm;
-        window.navigateToMyProfile = navigateToMyProfile;
-        window.navigateToTerms = navigateToTerms;
-        window.openRequestModal = openRequestModal;
-        window.openPostModal = openPostModal;
-        window.updateMyStatus = updateMyStatus;
-        window.addMutedWord = addMutedWord;
-        window.openAdminBroadcastModal = openAdminBroadcastModal;
-        window.submitAdminBroadcast = submitAdminBroadcast;
-        window.submitReport = submitReport;
-        window.submitRequest = submitRequest;
-        window.markNotifRead = markNotifRead;
-        window.switchHomeTab = switchHomeTab;
-        window.searchByTag = searchByTag;
-        window.castVote = castVote;
-        window.toggleBookmark = toggleBookmark;
-        window.openPostDetailModal = openPostDetailModal;
-        window.toggleLike = toggleLike;
-        window.toggleFollow = toggleFollow;
-        window.openCommentsModal = openCommentsModal;
-        window.setReplyTarget = setReplyTarget;
-        window.submitComment = submitComment;
-        window.switchMediaMode = switchMediaMode;
-        window.submitNewPost = submitNewPost;
-        window.deletePost = deletePost;
-        window.runSearch = runSearch;
-        window.switchProfileTab = switchProfileTab;
-        window.navigateToProfile = navigateToProfile;
-        window.openEditProfileModal = openEditProfileModal;
-        window.submitProfileUpdate = submitProfileUpdate;
-        window.goBack = goBack;
-        window.openLightbox = openLightbox;
-        window.closeLightbox = closeLightbox;
-        window.openRepostModal = openRepostModal;
-        window.openChatModal = openChatModal;
-        window.submitChatMessage = submitChatMessage;
-        window.toggleBlockUser = toggleBlockUser;
-        window.adminBanUser = adminBanUser;
-        window.openReportModal = openReportModal;
-        window.logout = logout;
-        window.toggleTheme = toggleTheme;
-
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
-        }
     </script>
 </head>
 <body>
@@ -2178,6 +2165,11 @@ AIにより不適切または著作権上の問題があるコンテンツと判
     </main>
 
     <aside class="right-sidebar">
+        <div class="widget-box">
+            <h3 style="font-size:0.95rem; margin-bottom:8px; color:var(--accent);"><i class="fa-solid fa-fire"></i> トレンドタグ</h3>
+            <div id="trend-widget-list"></div>
+        </div>
+
         <div class="widget-box">
             <h3 style="font-size:0.95rem; margin-bottom:6px; color:var(--accent);"><i class="fa-solid fa-book"></i> ドキュメント</h3>
             <p style="font-size:0.8rem; color:var(--text-muted); line-height:1.4; margin-bottom:10px;">
