@@ -133,6 +133,52 @@
             }
         });
 
+        
+        window.navigateToHome = navigateToHome;
+        window.navigateToSearch = navigateToSearch;
+        window.navigateToNotif = navigateToNotif;
+        window.navigateToDm = navigateToDm;
+        window.navigateToMyProfile = navigateToMyProfile;
+        window.navigateToTerms = navigateToTerms;
+        window.openRequestModal = openRequestModal;
+        window.openPostModal = openPostModal;
+        window.updateMyStatus = updateMyStatus;
+        window.addMutedWord = addMutedWord;
+        window.openAdminBroadcastModal = openAdminBroadcastModal;
+        window.submitAdminBroadcast = submitAdminBroadcast;
+        window.submitReport = submitReport;
+        window.submitRequest = submitRequest;
+        window.markNotifRead = markNotifRead;
+        window.switchHomeTab = switchHomeTab;
+        window.searchByTag = searchByTag;
+        window.castVote = castVote;
+        window.toggleBookmark = toggleBookmark;
+        window.openPostDetailModal = openPostDetailModal;
+        window.toggleLike = toggleLike;
+        window.toggleFollow = toggleFollow;
+        window.openCommentsModal = openCommentsModal;
+        window.setReplyTarget = setReplyTarget;
+        window.submitComment = submitComment;
+        window.switchMediaMode = switchMediaMode;
+        window.submitNewPost = submitNewPost;
+        window.deletePost = deletePost;
+        window.runSearch = runSearch;
+        window.switchProfileTab = switchProfileTab;
+        window.navigateToProfile = navigateToProfile;
+        window.openEditProfileModal = openEditProfileModal;
+        window.submitProfileUpdate = submitProfileUpdate;
+        window.goBack = goBack;
+        window.openLightbox = openLightbox;
+        window.closeLightbox = closeLightbox;
+        window.openRepostModal = openRepostModal;
+        window.openChatModal = openChatModal;
+        window.submitChatMessage = submitChatMessage;
+        window.toggleBlockUser = toggleBlockUser;
+        window.adminBanUser = adminBanUser;
+        window.openReportModal = openReportModal;
+        window.logout = logout;
+        window.toggleTheme = toggleTheme;
+
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
@@ -1080,9 +1126,7 @@ nav.mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; widt
             const post = allPosts.find(p => p.id === postId);
             if (!post) return;
 
-            const choice = prompt("操作を選んでください:
-1: リポスト (タイムラインに共有)
-2: 引用リポスト (コメントを添えて投稿)");
+            const choice = prompt("操作を選んでください:\n1: リポスト (タイムラインに共有)\n2: 引用リポスト (コメントを添えて投稿)");
             if (choice === '1') {
                 executeRepost(post);
             } else if (choice === '2') {
@@ -1938,6 +1982,52 @@ AIにより不適切または著作権上の問題があるコンテンツと判
             pushNavState({ view: 'profile', uid: uid });
         };
         window.goBack = () => window.history.back();
+
+        
+        window.navigateToHome = navigateToHome;
+        window.navigateToSearch = navigateToSearch;
+        window.navigateToNotif = navigateToNotif;
+        window.navigateToDm = navigateToDm;
+        window.navigateToMyProfile = navigateToMyProfile;
+        window.navigateToTerms = navigateToTerms;
+        window.openRequestModal = openRequestModal;
+        window.openPostModal = openPostModal;
+        window.updateMyStatus = updateMyStatus;
+        window.addMutedWord = addMutedWord;
+        window.openAdminBroadcastModal = openAdminBroadcastModal;
+        window.submitAdminBroadcast = submitAdminBroadcast;
+        window.submitReport = submitReport;
+        window.submitRequest = submitRequest;
+        window.markNotifRead = markNotifRead;
+        window.switchHomeTab = switchHomeTab;
+        window.searchByTag = searchByTag;
+        window.castVote = castVote;
+        window.toggleBookmark = toggleBookmark;
+        window.openPostDetailModal = openPostDetailModal;
+        window.toggleLike = toggleLike;
+        window.toggleFollow = toggleFollow;
+        window.openCommentsModal = openCommentsModal;
+        window.setReplyTarget = setReplyTarget;
+        window.submitComment = submitComment;
+        window.switchMediaMode = switchMediaMode;
+        window.submitNewPost = submitNewPost;
+        window.deletePost = deletePost;
+        window.runSearch = runSearch;
+        window.switchProfileTab = switchProfileTab;
+        window.navigateToProfile = navigateToProfile;
+        window.openEditProfileModal = openEditProfileModal;
+        window.submitProfileUpdate = submitProfileUpdate;
+        window.goBack = goBack;
+        window.openLightbox = openLightbox;
+        window.closeLightbox = closeLightbox;
+        window.openRepostModal = openRepostModal;
+        window.openChatModal = openChatModal;
+        window.submitChatMessage = submitChatMessage;
+        window.toggleBlockUser = toggleBlockUser;
+        window.adminBanUser = adminBanUser;
+        window.openReportModal = openReportModal;
+        window.logout = logout;
+        window.toggleTheme = toggleTheme;
 
         function escapeHtml(str) {
             if (!str) return '';
